@@ -1,0 +1,51 @@
+<!--
+  Azure OpenAI Policy
+  Applied to Azure OpenAI APIs exposed through the AI Gateway.
+  Provides token-based rate limiting, token usage metrics, and
+  managed identity authentication to the backend.
+-->
+<policies>
+    <inbound>
+        <base />
+        <!--
+          Optional: Entra ID (Azure AD) token validation for client-side auth.
+          Uncomment when OAuth 2.1 authentication is required for callers.
+        -->
+        <!--
+        <validate-azure-ad-token tenant-id="{{entra-tenant-id}}" output-token-variable-name="jwt-token">
+            <client-application-ids>
+                <application-id>{{entra-client-app-ids}}</application-id>
+            </client-application-ids>
+        </validate-azure-ad-token>
+        -->
+        <!-- Token-based rate limiting (tokens per minute) -->
+        <llm-token-limit
+            tokens-per-minute="10000"
+            counter-key="@(context.Subscription.Id)"
+            estimate-prompt-tokens="true"
+            tokens-consumed-header-name="x-]tokens-consumed"
+            remaining-tokens-header-name="x-tokens-remaining" />
+        <!-- Authenticate to Azure OpenAI backend using managed identity -->
+        <authentication-managed-identity resource="https://cognitiveservices.azure.com" />
+        <!-- Trace Azure OpenAI request details -->
+        <trace source="aoai-policy" severity="information">
+            <message>@($"Azure OpenAI Request | Subscription: {context.Subscription.Name} | Deployment: {context.Request.MatchedParameters["deployment-id"]}")</message>
+        </trace>
+    </inbound>
+    <backend>
+        <base />
+    </backend>
+    <outbound>
+        <base />
+        <!-- Emit token usage metrics from the response -->
+        <llm-emit-token-metric namespace="apim-mcp-gateway">
+            <dimension name="API ID" value="@(context.Api.Id)" />
+            <dimension name="Subscription ID" value="@(context.Subscription.Id)" />
+            <dimension name="Client IP" value="@(context.Request.IpAddress)" />
+            <dimension name="Model" value="@(context.Request.MatchedParameters.GetValueOrDefault("deployment-id", "unknown"))" />
+        </llm-emit-token-metric>
+    </outbound>
+    <on-error>
+        <base />
+    </on-error>
+</policies>

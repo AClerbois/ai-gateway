@@ -1,0 +1,2354 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.41.2.15936",
+      "templateHash": "9079581314305696759"
+    }
+  },
+  "parameters": {
+    "environment": {
+      "type": "string",
+      "defaultValue": "dev",
+      "allowedValues": [
+        "dev",
+        "staging",
+        "prod"
+      ],
+      "metadata": {
+        "description": "Environment name (dev, staging, prod)."
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Azure region for deployment."
+      }
+    },
+    "baseName": {
+      "type": "string",
+      "defaultValue": "[format('apim-mcp-{0}', parameters('environment'))]",
+      "metadata": {
+        "description": "Base name prefix for all resources."
+      }
+    },
+    "publisherEmail": {
+      "type": "string",
+      "metadata": {
+        "description": "Publisher email for the APIM instance."
+      }
+    },
+    "publisherName": {
+      "type": "string",
+      "metadata": {
+        "description": "Publisher name for the APIM instance."
+      }
+    },
+    "entraIdTenantId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Microsoft Entra ID tenant ID for token validation (optional)."
+      }
+    },
+    "entraIdClientAppIds": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Allowed Entra ID client application IDs, comma-separated (optional)."
+      }
+    },
+    "deployWrappedServers": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Deploy wrapped stdio MCP servers on Container Apps (requires images in ACR)."
+      }
+    },
+    "deployApiCenter": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Deploy Azure API Center to catalog MCP APIs."
+      }
+    }
+  },
+  "variables": {
+    "$fxv#0": {
+      "mcpServers": [
+        {
+          "name": "mslearn-mcp",
+          "displayName": "Microsoft Learn MCP Server",
+          "description": "Official Microsoft Learn documentation MCP server providing search and fetch tools.",
+          "type": "third-party",
+          "backendUrl": "https://learn.microsoft.com/api/mcp",
+          "transport": "streamable-http",
+          "basePath": "mslearn-mcp",
+          "rateLimitPerMinute": 30
+        },
+        {
+          "name": "custom-mcp",
+          "displayName": "Custom MCP Server",
+          "description": "Internal custom MCP server hosted on Azure Container Apps or Azure Functions.",
+          "type": "custom",
+          "backendUrl": "https://my-custom-mcp.azurewebsites.net",
+          "transport": "streamable-http",
+          "basePath": "custom-mcp",
+          "rateLimitPerMinute": 60
+        },
+        {
+          "name": "aoai-api",
+          "displayName": "Azure OpenAI API",
+          "description": "Azure OpenAI Service endpoint for chat completions and embeddings.",
+          "type": "azure-openai",
+          "backendUrl": "https://my-aoai-instance.openai.azure.com/openai",
+          "transport": "https",
+          "basePath": "aoai-api",
+          "rateLimitPerMinute": 120,
+          "tokensPerMinute": 10000,
+          "modelDeploymentName": "gpt-4o"
+        },
+        {
+          "name": "github-mcp",
+          "displayName": "GitHub MCP Server",
+          "description": "GitHub operations via supergateway wrapper (stdio → Streamable HTTP).",
+          "type": "custom",
+          "backendUrl": "https://CONTAINER_APP_FQDN_PLACEHOLDER",
+          "transport": "streamable-http",
+          "basePath": "github-mcp",
+          "rateLimitPerMinute": 60
+        },
+        {
+          "name": "azuredevops-mcp",
+          "displayName": "Azure DevOps MCP Server",
+          "description": "Azure DevOps operations via supergateway wrapper (stdio → Streamable HTTP).",
+          "type": "custom",
+          "backendUrl": "https://CONTAINER_APP_FQDN_PLACEHOLDER",
+          "transport": "streamable-http",
+          "basePath": "azuredevops-mcp",
+          "rateLimitPerMinute": 60
+        },
+        {
+          "name": "terraform-mcp",
+          "displayName": "Terraform MCP Server",
+          "description": "Terraform provider docs and resources via supergateway wrapper (stdio → Streamable HTTP).",
+          "type": "custom",
+          "backendUrl": "https://CONTAINER_APP_FQDN_PLACEHOLDER",
+          "transport": "streamable-http",
+          "basePath": "terraform-mcp",
+          "rateLimitPerMinute": 60
+        },
+        {
+          "name": "snyk-mcp",
+          "displayName": "Snyk MCP Server",
+          "description": "Snyk security scanning via supergateway wrapper (stdio → Streamable HTTP).",
+          "type": "custom",
+          "backendUrl": "https://CONTAINER_APP_FQDN_PLACEHOLDER",
+          "transport": "streamable-http",
+          "basePath": "snyk-mcp",
+          "rateLimitPerMinute": 60
+        },
+        {
+          "name": "fluentui-blazor-mcp",
+          "displayName": "Fluent UI Blazor MCP Server",
+          "description": "Fluent UI Blazor component docs via supergateway wrapper (stdio → Streamable HTTP).",
+          "type": "custom",
+          "backendUrl": "https://CONTAINER_APP_FQDN_PLACEHOLDER",
+          "transport": "streamable-http",
+          "basePath": "fluentui-blazor-mcp",
+          "rateLimitPerMinute": 60
+        }
+      ]
+    },
+    "$fxv#1": {
+      "wrappedMcpServers": [
+        {
+          "name": "github-mcp",
+          "displayName": "GitHub MCP Server",
+          "description": "GitHub operations: repos, issues, PRs, code search. Wrapped from stdio via supergateway.",
+          "imageName": "github-mcp",
+          "dockerContext": "docker/github-mcp",
+          "envVars": [
+            {
+              "name": "GITHUB_PERSONAL_ACCESS_TOKEN",
+              "value": ""
+            }
+          ]
+        },
+        {
+          "name": "azuredevops-mcp",
+          "displayName": "Azure DevOps MCP Server",
+          "description": "Azure DevOps operations: repos, pipelines, work items. Wrapped from stdio via supergateway.",
+          "imageName": "azuredevops-mcp",
+          "dockerContext": "docker/azuredevops-mcp",
+          "envVars": [
+            {
+              "name": "AZURE_DEVOPS_ORG_URL",
+              "value": ""
+            },
+            {
+              "name": "AZURE_DEVOPS_AUTH_METHOD",
+              "value": "pat"
+            },
+            {
+              "name": "AZURE_DEVOPS_PAT",
+              "value": ""
+            }
+          ]
+        },
+        {
+          "name": "terraform-mcp",
+          "displayName": "Terraform MCP Server",
+          "description": "Terraform provider docs, resource lookup, module search. Wrapped from stdio via supergateway.",
+          "imageName": "terraform-mcp",
+          "dockerContext": "docker/terraform-mcp",
+          "envVars": []
+        },
+        {
+          "name": "snyk-mcp",
+          "displayName": "Snyk MCP Server",
+          "description": "Snyk security scanning: vulnerabilities, license issues. Wrapped from stdio via supergateway.",
+          "imageName": "snyk-mcp",
+          "dockerContext": "docker/snyk-mcp",
+          "envVars": [
+            {
+              "name": "SNYK_TOKEN",
+              "value": ""
+            }
+          ]
+        },
+        {
+          "name": "fluentui-blazor-mcp",
+          "displayName": "Fluent UI Blazor MCP Server",
+          "description": "Fluent UI Blazor component docs: 142+ components, 10 tools, 9 resources. Wrapped from stdio via supergateway.",
+          "imageName": "fluentui-blazor-mcp",
+          "dockerContext": "docker/fluentui-blazor-mcp",
+          "envVars": []
+        }
+      ]
+    },
+    "$fxv#2": {
+      "profiles": [
+        {
+          "name": "all-mcp-tools",
+          "displayName": "All MCP Tools",
+          "description": "Full access to all MCP servers — for administrators and platform teams.",
+          "servers": [
+            "*"
+          ],
+          "subscriptionsLimit": 5,
+          "approvalRequired": true
+        },
+        {
+          "name": "developer",
+          "displayName": "Developer",
+          "description": "Development and DevOps tools: GitHub, Azure DevOps, Terraform, Snyk, Fluent UI Blazor, Azure OpenAI.",
+          "servers": [
+            "github-mcp",
+            "azuredevops-mcp",
+            "terraform-mcp",
+            "snyk-mcp",
+            "fluentui-blazor-mcp",
+            "aoai-api"
+          ],
+          "subscriptionsLimit": 10,
+          "approvalRequired": false
+        },
+        {
+          "name": "business-analyst",
+          "displayName": "Business Analyst",
+          "description": "Documentation and AI tools: Microsoft Learn, Custom MCP, Azure OpenAI.",
+          "servers": [
+            "mslearn-mcp",
+            "custom-mcp",
+            "aoai-api"
+          ],
+          "subscriptionsLimit": 10,
+          "approvalRequired": false
+        },
+        {
+          "name": "app-1",
+          "displayName": "Application 1",
+          "description": "MCP tools scoped to Application 1.",
+          "servers": [
+            "mslearn-mcp",
+            "custom-mcp",
+            "github-mcp",
+            "aoai-api"
+          ],
+          "subscriptionsLimit": 5,
+          "approvalRequired": true
+        },
+        {
+          "name": "app-2",
+          "displayName": "Application 2",
+          "description": "MCP tools scoped to Application 2.",
+          "servers": [
+            "mslearn-mcp",
+            "terraform-mcp",
+            "snyk-mcp",
+            "aoai-api"
+          ],
+          "subscriptionsLimit": 5,
+          "approvalRequired": true
+        }
+      ]
+    },
+    "$fxv#3": {
+      "$schema": "./mcp-whitelist.schema.json",
+      "metadata": {
+        "version": "1.0.0",
+        "description": "MCP Server Whitelisting Registry — approved MCP servers for the APIM gateway.",
+        "lastUpdated": "2026-03-15",
+        "maintainers": [
+          "adrien@senseof.tech"
+        ]
+      },
+      "approvedServers": [
+        {
+          "name": "mslearn-mcp",
+          "displayName": "Microsoft Learn MCP Server",
+          "publisher": "Microsoft",
+          "source": "https://learn.microsoft.com/api/mcp",
+          "sourceType": "managed-service",
+          "transport": "streamable-http",
+          "approvedVersions": [
+            "*"
+          ],
+          "securityReview": {
+            "status": "approved",
+            "reviewedBy": "platform-team",
+            "reviewDate": "2026-03-01",
+            "nextReviewDate": "2026-09-01",
+            "riskLevel": "low",
+            "notes": "Official Microsoft managed endpoint — no self-hosted code."
+          },
+          "restrictions": {
+            "maxRateLimitPerMinute": 60,
+            "allowedProfiles": [
+              "*"
+            ],
+            "requireEntraAuth": false
+          }
+        },
+        {
+          "name": "custom-mcp",
+          "displayName": "Custom MCP Server",
+          "publisher": "Sense of Tech",
+          "source": "https://github.com/senseof-tech/custom-mcp-server",
+          "sourceType": "internal",
+          "transport": "streamable-http",
+          "approvedVersions": [
+            "1.x",
+            "2.x"
+          ],
+          "securityReview": {
+            "status": "approved",
+            "reviewedBy": "security-team",
+            "reviewDate": "2026-02-15",
+            "nextReviewDate": "2026-08-15",
+            "riskLevel": "low",
+            "notes": "Internal server — full code ownership and audit."
+          },
+          "restrictions": {
+            "maxRateLimitPerMinute": 120,
+            "allowedProfiles": [
+              "*"
+            ],
+            "requireEntraAuth": false
+          }
+        },
+        {
+          "name": "aoai-api",
+          "displayName": "Azure OpenAI API",
+          "publisher": "Microsoft",
+          "source": "https://learn.microsoft.com/azure/ai-services/openai/",
+          "sourceType": "managed-service",
+          "transport": "https",
+          "approvedVersions": [
+            "*"
+          ],
+          "securityReview": {
+            "status": "approved",
+            "reviewedBy": "platform-team",
+            "reviewDate": "2026-03-01",
+            "nextReviewDate": "2026-09-01",
+            "riskLevel": "low",
+            "notes": "Azure managed service with Managed Identity auth."
+          },
+          "restrictions": {
+            "maxRateLimitPerMinute": 200,
+            "maxTokensPerMinute": 20000,
+            "allowedProfiles": [
+              "*"
+            ],
+            "requireEntraAuth": true
+          }
+        },
+        {
+          "name": "github-mcp",
+          "displayName": "GitHub MCP Server",
+          "publisher": "GitHub (modelcontextprotocol)",
+          "source": "npm:@modelcontextprotocol/server-github",
+          "sourceType": "open-source",
+          "transport": "stdio",
+          "approvedVersions": [
+            "0.x",
+            "1.x"
+          ],
+          "securityReview": {
+            "status": "approved",
+            "reviewedBy": "security-team",
+            "reviewDate": "2026-02-20",
+            "nextReviewDate": "2026-08-20",
+            "riskLevel": "medium",
+            "notes": "Open-source, maintained by GitHub. Requires PAT — restrict scopes to minimum."
+          },
+          "restrictions": {
+            "maxRateLimitPerMinute": 60,
+            "allowedProfiles": [
+              "developer",
+              "app-1",
+              "all-mcp-tools"
+            ],
+            "requireEntraAuth": false,
+            "requiredSecrets": [
+              "GITHUB_PERSONAL_ACCESS_TOKEN"
+            ]
+          },
+          "mcpPrimitives": {
+            "tools": {
+              "policy": "denyList",
+              "denied": [
+                "delete_repository",
+                "delete_branch",
+                "delete_file"
+              ],
+              "reason": "Destructive operations blocked by governance policy."
+            },
+            "prompts": {
+              "policy": "allowAll"
+            },
+            "resources": {
+              "policy": "allowAll"
+            }
+          }
+        },
+        {
+          "name": "azuredevops-mcp",
+          "displayName": "Azure DevOps MCP Server",
+          "publisher": "Microsoft (AzureDevOps-MCP)",
+          "source": "npm:@anthropic/azure-devops-mcp",
+          "sourceType": "open-source",
+          "transport": "stdio",
+          "approvedVersions": [
+            "0.x",
+            "1.x"
+          ],
+          "securityReview": {
+            "status": "approved",
+            "reviewedBy": "security-team",
+            "reviewDate": "2026-02-20",
+            "nextReviewDate": "2026-08-20",
+            "riskLevel": "medium",
+            "notes": "Requires Azure DevOps PAT — restrict scopes. Pin npm version in Dockerfile."
+          },
+          "restrictions": {
+            "maxRateLimitPerMinute": 60,
+            "allowedProfiles": [
+              "developer",
+              "all-mcp-tools"
+            ],
+            "requireEntraAuth": false,
+            "requiredSecrets": [
+              "AZURE_DEVOPS_PAT"
+            ]
+          },
+          "mcpPrimitives": {
+            "tools": {
+              "policy": "allowList",
+              "allowed": [
+                "get_work_item",
+                "list_work_items",
+                "search_work_items",
+                "get_pull_request",
+                "list_pull_requests",
+                "get_pipeline",
+                "list_pipelines",
+                "get_repository",
+                "list_repositories"
+              ],
+              "reason": "Only read operations allowed — write ops require separate approval."
+            },
+            "prompts": {
+              "policy": "allowAll"
+            },
+            "resources": {
+              "policy": "denyList",
+              "denied": [
+                "secret://*"
+              ],
+              "reason": "Secret resources blocked for security."
+            }
+          }
+        },
+        {
+          "name": "terraform-mcp",
+          "displayName": "Terraform MCP Server",
+          "publisher": "HashiCorp (hashicorp-forge)",
+          "source": "npm:@hashicorp/terraform-mcp-server",
+          "sourceType": "open-source",
+          "transport": "stdio",
+          "approvedVersions": [
+            "0.x",
+            "1.x"
+          ],
+          "securityReview": {
+            "status": "approved",
+            "reviewedBy": "security-team",
+            "reviewDate": "2026-03-01",
+            "nextReviewDate": "2026-09-01",
+            "riskLevel": "low",
+            "notes": "Read-only documentation server. No credentials required."
+          },
+          "restrictions": {
+            "maxRateLimitPerMinute": 60,
+            "allowedProfiles": [
+              "developer",
+              "app-2",
+              "all-mcp-tools"
+            ],
+            "requireEntraAuth": false
+          }
+        },
+        {
+          "name": "snyk-mcp",
+          "displayName": "Snyk MCP Server",
+          "publisher": "Snyk",
+          "source": "npm:snyk-mcp-server",
+          "sourceType": "open-source",
+          "transport": "stdio",
+          "approvedVersions": [
+            "0.x",
+            "1.x"
+          ],
+          "securityReview": {
+            "status": "approved",
+            "reviewedBy": "security-team",
+            "reviewDate": "2026-03-05",
+            "nextReviewDate": "2026-09-05",
+            "riskLevel": "medium",
+            "notes": "Security scanning — requires Snyk token. Ensure token has minimal scopes."
+          },
+          "restrictions": {
+            "maxRateLimitPerMinute": 60,
+            "allowedProfiles": [
+              "developer",
+              "app-2",
+              "all-mcp-tools"
+            ],
+            "requireEntraAuth": false,
+            "requiredSecrets": [
+              "SNYK_TOKEN"
+            ]
+          }
+        },
+        {
+          "name": "fluentui-blazor-mcp",
+          "displayName": "Fluent UI Blazor MCP Server",
+          "publisher": "Microsoft (AzureAaron)",
+          "source": "npm:fluentui-blazor-mcp-server",
+          "sourceType": "open-source",
+          "transport": "stdio",
+          "approvedVersions": [
+            "0.x",
+            "1.x"
+          ],
+          "securityReview": {
+            "status": "approved",
+            "reviewedBy": "platform-team",
+            "reviewDate": "2026-03-01",
+            "nextReviewDate": "2026-09-01",
+            "riskLevel": "low",
+            "notes": "Documentation-only server, read-only, no credentials."
+          },
+          "restrictions": {
+            "maxRateLimitPerMinute": 60,
+            "allowedProfiles": [
+              "developer",
+              "all-mcp-tools"
+            ],
+            "requireEntraAuth": false
+          }
+        }
+      ],
+      "blockedServers": [
+        {
+          "name": "example-blocked-server",
+          "reason": "Known vulnerability CVE-2026-XXXXX — pending fix.",
+          "blockedDate": "2026-03-10",
+          "blockedBy": "security-team"
+        }
+      ],
+      "policies": {
+        "defaultAction": "deny",
+        "requireSecurityReview": true,
+        "maxReviewValidityDays": 180,
+        "autoBlockOnExpiredReview": true,
+        "allowUnreviewedInDev": false,
+        "notifyOnExpiringSoon": 30,
+        "mcpPrimitivesDefaults": {
+          "tools": {
+            "policy": "allowAll"
+          },
+          "prompts": {
+            "policy": "allowAll"
+          },
+          "resources": {
+            "policy": "allowAll"
+          }
+        }
+      }
+    },
+    "tags": {
+      "project": "apim-mcp",
+      "environment": "[parameters('environment')]",
+      "managedBy": "bicep"
+    },
+    "mcpConfig": "[variables('$fxv#0')]",
+    "mcpServers": "[variables('mcpConfig').mcpServers]",
+    "globalPolicyXml": "<!--\r\n  Global APIM Policy\r\n  Applied to all APIs. Handles CORS, request metrics, and tracing.\r\n-->\r\n<policies>\r\n    <inbound>\r\n        <base />\r\n        <!-- CORS for local development (VS Code / MCP clients) -->\r\n        <cors allow-credentials=\"true\">\r\n            <allowed-origins>\r\n                <origin>http://localhost:3000</origin>\r\n                <origin>https://portal.azure.com</origin>\r\n                <origin>https://vscode.dev</origin>\r\n            </allowed-origins>\r\n            <allowed-methods preflight-result-max-age=\"300\">\r\n                <method>GET</method>\r\n                <method>POST</method>\r\n                <method>DELETE</method>\r\n                <method>OPTIONS</method>\r\n            </allowed-methods>\r\n            <allowed-headers>\r\n                <header>Content-Type</header>\r\n                <header>Authorization</header>\r\n                <header>Ocp-Apim-Subscription-Key</header>\r\n                <header>Mcp-Session-Id</header>\r\n                <header>Accept</header>\r\n            </allowed-headers>\r\n            <expose-headers>\r\n                <header>Mcp-Session-Id</header>\r\n                <header>Content-Type</header>\r\n            </expose-headers>\r\n        </cors>\r\n        <!-- Emit custom metric for request counting -->\r\n        <emit-metric name=\"mcp-gateway-requests\" value=\"1\" namespace=\"apim-mcp-gateway\">\r\n            <dimension name=\"API ID\" value=\"@(context.Api.Id)\" />\r\n            <dimension name=\"Subscription ID\" value=\"@(context.Subscription.Id)\" />\r\n            <dimension name=\"Client IP\" value=\"@(context.Request.IpAddress)\" />\r\n            <dimension name=\"Operation\" value=\"@(context.Operation.Id)\" />\r\n        </emit-metric>\r\n        <!-- Tracing for diagnostics -->\r\n        <trace source=\"global-policy\" severity=\"information\">\r\n            <message>@($\"Request: {context.Request.Method} {context.Request.Url.Path} | API: {context.Api.Name} | Subscription: {context.Subscription.Name}\")</message>\r\n        </trace>\r\n    </inbound>\r\n    <backend>\r\n        <base />\r\n    </backend>\r\n    <outbound>\r\n        <base />\r\n    </outbound>\r\n    <on-error>\r\n        <base />\r\n        <trace source=\"global-policy\" severity=\"error\">\r\n            <message>@($\"Error: {context.LastError.Message} | Reason: {context.LastError.Reason} | API: {context.Api.Name}\")</message>\r\n        </trace>\r\n    </on-error>\r\n</policies>\r\n",
+    "mcpPolicyXml": "<!--\r\n  MCP Passthrough Policy\r\n  Applied to MCP server APIs. Handles rate limiting, optional Entra ID\r\n  validation, MCP primitives filtering, and MCP protocol transparency\r\n  (Streamable HTTP / JSON-RPC 2.0).\r\n-->\r\n<policies>\r\n    <inbound>\r\n        <base />\r\n        <!--\r\n          Optional: Entra ID (Azure AD) token validation.\r\n          Uncomment the block below when OAuth 2.1 authentication is required.\r\n          Configure named values: entra-tenant-id, entra-client-app-ids.\r\n        -->\r\n        <!--\r\n        <validate-azure-ad-token tenant-id=\"{{entra-tenant-id}}\" output-token-variable-name=\"jwt-token\">\r\n            <client-application-ids>\r\n                <application-id>{{entra-client-app-ids}}</application-id>\r\n            </client-application-ids>\r\n        </validate-azure-ad-token>\r\n        -->\r\n        <!-- Rate limit per MCP session to prevent abuse -->\r\n        <rate-limit-by-key\r\n            calls=\"60\"\r\n            renewal-period=\"60\"\r\n            counter-key=\"@(context.Request.Headers.GetValueOrDefault(\"Mcp-Session-Id\", context.Request.IpAddress))\"\r\n            increment-condition=\"@(context.Response.StatusCode >= 200 && context.Response.StatusCode < 400)\" />\r\n        <!-- Trace MCP-specific request details -->\r\n        <trace source=\"mcp-passthrough\" severity=\"information\">\r\n            <message>@{\r\n                var sessionId = context.Request.Headers.GetValueOrDefault(\"Mcp-Session-Id\", \"no-session\");\r\n                return $\"MCP Request | Session: {sessionId} | Method: {context.Request.Method} | Path: {context.Request.Url.Path}\";\r\n            }</message>\r\n        </trace>\r\n        <!--\r\n          MCP Primitives Filtering (tools, prompts, resources).\r\n          Reads per-server filter config from Named Value: mcp-primitives-<serverName>.\r\n          If no Named Value exists, all primitives are allowed (passthrough).\r\n        -->\r\n        <choose>\r\n            <when condition=\"@(context.Request.Method == \"POST\")\">\r\n                <set-variable name=\"mcp-request-body\" value=\"@(context.Request.Body.As<string>(preserveContent: true))\" />\r\n                <set-variable name=\"mcp-jsonrpc-method\" value=\"@{\r\n                    var body = (string)context.Variables[\"mcp-request-body\"];\r\n                    if (string.IsNullOrEmpty(body)) return \"\";\r\n                    try {\r\n                        var json = Newtonsoft.Json.Linq.JObject.Parse(body);\r\n                        return json[\"method\"]?.ToString() ?? \"\";\r\n                    } catch { return \"\"; }\r\n                }\" />\r\n                <choose>\r\n                    <when condition=\"@{\r\n                        var m = (string)context.Variables[\"mcp-jsonrpc-method\"];\r\n                        return m == \"tools/call\" || m == \"prompts/get\" || m == \"resources/read\";\r\n                    }\">\r\n                        <set-variable name=\"mcp-primitive-name\" value=\"@{\r\n                            var body = (string)context.Variables[\"mcp-request-body\"];\r\n                            var method = (string)context.Variables[\"mcp-jsonrpc-method\"];\r\n                            try {\r\n                                var json = Newtonsoft.Json.Linq.JObject.Parse(body);\r\n                                var p = json[\"params\"];\r\n                                if (p == null) return \"\";\r\n                                return method == \"resources/read\"\r\n                                    ? (p[\"uri\"]?.ToString() ?? \"\")\r\n                                    : (p[\"name\"]?.ToString() ?? \"\");\r\n                            } catch { return \"\"; }\r\n                        }\" />\r\n                        <set-variable name=\"mcp-primitive-type\" value=\"@{\r\n                            var m = (string)context.Variables[\"mcp-jsonrpc-method\"];\r\n                            if (m == \"tools/call\") return \"tools\";\r\n                            if (m == \"prompts/get\") return \"prompts\";\r\n                            return \"resources\";\r\n                        }\" />\r\n                        <set-variable name=\"mcp-filter-blocked\" value=\"@{\r\n                            var primitiveType = (string)context.Variables[\"mcp-primitive-type\"];\r\n                            var name = (string)context.Variables[\"mcp-primitive-name\"];\r\n                            if (string.IsNullOrEmpty(name)) return \"false\";\r\n\r\n                            var serverName = context.Api.Id.Replace(\"-api\", \"\");\r\n                            string configJson;\r\n                            try {\r\n                                configJson = \"{{mcp-primitives-\" + serverName + \"}}\";\r\n                            } catch {\r\n                                return \"false\";\r\n                            }\r\n                            if (string.IsNullOrEmpty(configJson) || configJson.StartsWith(\"{{\")) return \"false\";\r\n\r\n                            try {\r\n                                var config = Newtonsoft.Json.Linq.JObject.Parse(configJson);\r\n                                var filter = config[primitiveType];\r\n                                if (filter == null) return \"false\";\r\n                                var policy = filter[\"policy\"]?.ToString() ?? \"allowAll\";\r\n\r\n                                if (policy == \"denyAll\") return \"true\";\r\n                                if (policy == \"allowAll\") return \"false\";\r\n\r\n                                if (policy == \"denyList\") {\r\n                                    var denied = filter[\"denied\"]?.ToObject<string[]>() ?? new string[0];\r\n                                    foreach (var d in denied) {\r\n                                        if (d.EndsWith(\"*\") ? name.StartsWith(d.TrimEnd('*')) : name == d)\r\n                                            return \"true\";\r\n                                    }\r\n                                    return \"false\";\r\n                                }\r\n                                if (policy == \"allowList\") {\r\n                                    var allowed = filter[\"allowed\"]?.ToObject<string[]>() ?? new string[0];\r\n                                    foreach (var a in allowed) {\r\n                                        if (a.EndsWith(\"*\") ? name.StartsWith(a.TrimEnd('*')) : name == a)\r\n                                            return \"false\";\r\n                                    }\r\n                                    return \"true\";\r\n                                }\r\n                                return \"false\";\r\n                            } catch { return \"false\"; }\r\n                        }\" />\r\n                        <choose>\r\n                            <when condition=\"@((string)context.Variables[\"mcp-filter-blocked\"] == \"true\")\">\r\n                                <return-response>\r\n                                    <set-status code=\"403\" reason=\"Forbidden\" />\r\n                                    <set-header name=\"Content-Type\" exists-action=\"override\">\r\n                                        <value>application/json</value>\r\n                                    </set-header>\r\n                                    <set-body>@{\r\n                                        var body = (string)context.Variables[\"mcp-request-body\"];\r\n                                        var id = \"null\";\r\n                                        try { id = Newtonsoft.Json.Linq.JObject.Parse(body)[\"id\"]?.ToString() ?? \"null\"; } catch {}\r\n                                        var pType = (string)context.Variables[\"mcp-primitive-type\"];\r\n                                        var pName = (string)context.Variables[\"mcp-primitive-name\"];\r\n                                        return $\"{{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"id\\\":{id},\\\"error\\\":{{\\\"code\\\":-32600,\\\"message\\\":\\\"Blocked by governance policy: {pType}/{pName} is not allowed on this gateway.\\\"}}}}\";\r\n                                    }</set-body>\r\n                                </return-response>\r\n                            </when>\r\n                        </choose>\r\n                    </when>\r\n                </choose>\r\n            </when>\r\n        </choose>\r\n        <!-- Set backend to the configured MCP server -->\r\n        <set-backend-service backend-id=\"@(context.Api.Id.Replace(\"-api\", \"-backend\"))\" />\r\n    </inbound>\r\n    <backend>\r\n        <base />\r\n    </backend>\r\n    <outbound>\r\n        <base />\r\n        <!-- Ensure MCP Session ID is forwarded in response -->\r\n        <set-header name=\"Mcp-Session-Id\" exists-action=\"skip\">\r\n            <value>@(context.Request.Headers.GetValueOrDefault(\"Mcp-Session-Id\", \"\"))</value>\r\n        </set-header>\r\n    </outbound>\r\n    <on-error>\r\n        <base />\r\n    </on-error>\r\n</policies>\r\n",
+    "aoaiPolicyXml": "<!--\r\n  Azure OpenAI Policy\r\n  Applied to Azure OpenAI APIs exposed through the AI Gateway.\r\n  Provides token-based rate limiting, token usage metrics, and\r\n  managed identity authentication to the backend.\r\n-->\r\n<policies>\r\n    <inbound>\r\n        <base />\r\n        <!--\r\n          Optional: Entra ID (Azure AD) token validation for client-side auth.\r\n          Uncomment when OAuth 2.1 authentication is required for callers.\r\n        -->\r\n        <!--\r\n        <validate-azure-ad-token tenant-id=\"{{entra-tenant-id}}\" output-token-variable-name=\"jwt-token\">\r\n            <client-application-ids>\r\n                <application-id>{{entra-client-app-ids}}</application-id>\r\n            </client-application-ids>\r\n        </validate-azure-ad-token>\r\n        -->\r\n        <!-- Token-based rate limiting (tokens per minute) -->\r\n        <llm-token-limit\r\n            tokens-per-minute=\"10000\"\r\n            counter-key=\"@(context.Subscription.Id)\"\r\n            estimate-prompt-tokens=\"true\"\r\n            tokens-consumed-header-name=\"x-]tokens-consumed\"\r\n            remaining-tokens-header-name=\"x-tokens-remaining\" />\r\n        <!-- Authenticate to Azure OpenAI backend using managed identity -->\r\n        <authentication-managed-identity resource=\"https://cognitiveservices.azure.com\" />\r\n        <!-- Trace Azure OpenAI request details -->\r\n        <trace source=\"aoai-policy\" severity=\"information\">\r\n            <message>@($\"Azure OpenAI Request | Subscription: {context.Subscription.Name} | Deployment: {context.Request.MatchedParameters[\"deployment-id\"]}\")</message>\r\n        </trace>\r\n    </inbound>\r\n    <backend>\r\n        <base />\r\n    </backend>\r\n    <outbound>\r\n        <base />\r\n        <!-- Emit token usage metrics from the response -->\r\n        <llm-emit-token-metric namespace=\"apim-mcp-gateway\">\r\n            <dimension name=\"API ID\" value=\"@(context.Api.Id)\" />\r\n            <dimension name=\"Subscription ID\" value=\"@(context.Subscription.Id)\" />\r\n            <dimension name=\"Client IP\" value=\"@(context.Request.IpAddress)\" />\r\n            <dimension name=\"Model\" value=\"@(context.Request.MatchedParameters.GetValueOrDefault(\"deployment-id\", \"unknown\"))\" />\r\n        </llm-emit-token-metric>\r\n    </outbound>\r\n    <on-error>\r\n        <base />\r\n    </on-error>\r\n</policies>\r\n",
+    "wrappedConfig": "[variables('$fxv#1')]",
+    "wrappedMcpServers": "[variables('wrappedConfig').wrappedMcpServers]",
+    "profilesConfig": "[variables('$fxv#2')]",
+    "profiles": "[variables('profilesConfig').profiles]",
+    "whitelistConfig": "[variables('$fxv#3')]",
+    "approvedServers": "[variables('whitelistConfig').approvedServers]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "monitoring",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "baseName": {
+            "value": "[parameters('baseName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "tags": {
+            "value": "[variables('tags')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "13894067881157387519"
+            }
+          },
+          "parameters": {
+            "baseName": {
+              "type": "string",
+              "metadata": {
+                "description": "Base name for all resources."
+              }
+            },
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for deployment."
+              }
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Resource tags."
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.OperationalInsights/workspaces",
+              "apiVersion": "2023-09-01",
+              "name": "[format('{0}-law', parameters('baseName'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "sku": {
+                  "name": "PerGB2018"
+                },
+                "retentionInDays": 90
+              }
+            },
+            {
+              "type": "Microsoft.Insights/components",
+              "apiVersion": "2020-02-02",
+              "name": "[format('{0}-ai', parameters('baseName'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "kind": "web",
+              "properties": {
+                "Application_Type": "web",
+                "WorkspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-law', parameters('baseName')))]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-law', parameters('baseName')))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "logAnalyticsWorkspaceId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-law', parameters('baseName')))]"
+            },
+            "appInsightsId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Insights/components', format('{0}-ai', parameters('baseName')))]"
+            },
+            "appInsightsInstrumentationKey": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Insights/components', format('{0}-ai', parameters('baseName'))), '2020-02-02').InstrumentationKey]"
+            },
+            "appInsightsConnectionString": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Insights/components', format('{0}-ai', parameters('baseName'))), '2020-02-02').ConnectionString]"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "apim",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "baseName": {
+            "value": "[parameters('baseName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "publisherEmail": {
+            "value": "[parameters('publisherEmail')]"
+          },
+          "publisherName": {
+            "value": "[parameters('publisherName')]"
+          },
+          "tags": {
+            "value": "[variables('tags')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "7520133211780112163"
+            }
+          },
+          "parameters": {
+            "baseName": {
+              "type": "string",
+              "metadata": {
+                "description": "Base name for all resources."
+              }
+            },
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for deployment."
+              }
+            },
+            "publisherEmail": {
+              "type": "string",
+              "metadata": {
+                "description": "Publisher email for APIM."
+              }
+            },
+            "publisherName": {
+              "type": "string",
+              "metadata": {
+                "description": "Publisher name for APIM."
+              }
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Resource tags."
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.ApiManagement/service",
+              "apiVersion": "2024-06-01-preview",
+              "name": "[format('{0}-apim', parameters('baseName'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "sku": {
+                "name": "Developer",
+                "capacity": 1
+              },
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "publisherEmail": "[parameters('publisherEmail')]",
+                "publisherName": "[parameters('publisherName')]",
+                "releaseChannel": "Preview",
+                "customProperties": {
+                  "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Protocols.Ssl30": "false",
+                  "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Protocols.Tls10": "false",
+                  "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Protocols.Tls11": "false",
+                  "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Backend.Protocols.Ssl30": "false",
+                  "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Backend.Protocols.Tls10": "false",
+                  "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Backend.Protocols.Tls11": "false",
+                  "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Ciphers.TripleDes168": "false",
+                  "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Ciphers.TLS_RSA_WITH_AES_128_CBC_SHA": "false",
+                  "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Ciphers.TLS_RSA_WITH_AES_256_CBC_SHA": "false",
+                  "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Ciphers.TLS_RSA_WITH_AES_128_CBC_SHA256": "false",
+                  "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Ciphers.TLS_RSA_WITH_AES_256_CBC_SHA256": "false",
+                  "Microsoft.WindowsAzure.ApiManagement.Gateway.Protocols.Server.Http2": "true"
+                }
+              }
+            }
+          ],
+          "outputs": {
+            "apimId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.ApiManagement/service', format('{0}-apim', parameters('baseName')))]"
+            },
+            "apimName": {
+              "type": "string",
+              "value": "[format('{0}-apim', parameters('baseName'))]"
+            },
+            "apimGatewayUrl": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.ApiManagement/service', format('{0}-apim', parameters('baseName'))), '2024-06-01-preview').gatewayUrl]"
+            },
+            "apimPrincipalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.ApiManagement/service', format('{0}-apim', parameters('baseName'))), '2024-06-01-preview', 'full').identity.principalId]"
+            }
+          }
+        }
+      }
+    },
+    {
+      "condition": "[parameters('deployWrappedServers')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "container-registry",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "baseName": {
+            "value": "[parameters('baseName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "tags": {
+            "value": "[variables('tags')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "16032659005232954535"
+            }
+          },
+          "parameters": {
+            "baseName": {
+              "type": "string",
+              "metadata": {
+                "description": "Base name for all resources."
+              }
+            },
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for deployment."
+              }
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Resource tags."
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.ContainerRegistry/registries",
+              "apiVersion": "2023-11-01-preview",
+              "name": "[replace(format('{0}acr', parameters('baseName')), '-', '')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "sku": {
+                "name": "Basic"
+              },
+              "properties": {
+                "adminUserEnabled": true
+              }
+            }
+          ],
+          "outputs": {
+            "acrId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.ContainerRegistry/registries', replace(format('{0}acr', parameters('baseName')), '-', ''))]"
+            },
+            "acrName": {
+              "type": "string",
+              "value": "[replace(format('{0}acr', parameters('baseName')), '-', '')]"
+            },
+            "acrLoginServer": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.ContainerRegistry/registries', replace(format('{0}acr', parameters('baseName')), '-', '')), '2023-11-01-preview').loginServer]"
+            }
+          }
+        }
+      }
+    },
+    {
+      "condition": "[parameters('deployWrappedServers')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "container-apps",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "baseName": {
+            "value": "[parameters('baseName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "tags": {
+            "value": "[variables('tags')]"
+          },
+          "logAnalyticsWorkspaceId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'monitoring'), '2025-04-01').outputs.logAnalyticsWorkspaceId.value]"
+          },
+          "acrLoginServer": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'container-registry'), '2025-04-01').outputs.acrLoginServer.value]"
+          },
+          "acrName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'container-registry'), '2025-04-01').outputs.acrName.value]"
+          },
+          "wrappedMcpServers": {
+            "value": "[variables('wrappedMcpServers')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "15857719588084459270"
+            }
+          },
+          "parameters": {
+            "baseName": {
+              "type": "string",
+              "metadata": {
+                "description": "Base name for all resources."
+              }
+            },
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for deployment."
+              }
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Resource tags."
+              }
+            },
+            "logAnalyticsWorkspaceId": {
+              "type": "string",
+              "metadata": {
+                "description": "Log Analytics workspace ID for Container Apps diagnostics."
+              }
+            },
+            "acrLoginServer": {
+              "type": "string",
+              "metadata": {
+                "description": "ACR login server (e.g. myacr.azurecr.io)."
+              }
+            },
+            "acrName": {
+              "type": "string",
+              "metadata": {
+                "description": "ACR resource name."
+              }
+            },
+            "wrappedMcpServers": {
+              "type": "array",
+              "metadata": {
+                "description": "Array of wrapped MCP server definitions from config."
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.App/managedEnvironments",
+              "apiVersion": "2024-03-01",
+              "name": "[format('{0}-cae', parameters('baseName'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "appLogsConfiguration": {
+                  "destination": "log-analytics",
+                  "logAnalyticsConfiguration": {
+                    "customerId": "[reference(parameters('logAnalyticsWorkspaceId'), '2023-09-01').customerId]",
+                    "sharedKey": "[listKeys(parameters('logAnalyticsWorkspaceId'), '2023-09-01').primarySharedKey]"
+                  }
+                }
+              }
+            },
+            {
+              "copy": {
+                "name": "containerApps",
+                "count": "[length(parameters('wrappedMcpServers'))]"
+              },
+              "type": "Microsoft.App/containerApps",
+              "apiVersion": "2024-03-01",
+              "name": "[format('{0}-{1}', parameters('baseName'), parameters('wrappedMcpServers')[copyIndex()].name)]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "managedEnvironmentId": "[resourceId('Microsoft.App/managedEnvironments', format('{0}-cae', parameters('baseName')))]",
+                "configuration": {
+                  "ingress": {
+                    "external": true,
+                    "targetPort": 8000,
+                    "transport": "http",
+                    "allowInsecure": false
+                  },
+                  "registries": [
+                    {
+                      "server": "[parameters('acrLoginServer')]",
+                      "username": "[listCredentials(resourceId('Microsoft.ContainerRegistry/registries', parameters('acrName')), '2023-11-01-preview').username]",
+                      "passwordSecretRef": "acr-password"
+                    }
+                  ],
+                  "secrets": "[concat(createArray(createObject('name', 'acr-password', 'value', listCredentials(resourceId('Microsoft.ContainerRegistry/registries', parameters('acrName')), '2023-11-01-preview').passwords[0].value)), map(parameters('wrappedMcpServers')[copyIndex()].envVars, lambda('envVar', createObject('name', toLower(replace(lambdaVariables('envVar').name, '_', '-')), 'value', lambdaVariables('envVar').value))))]"
+                },
+                "template": {
+                  "containers": [
+                    {
+                      "copy": [
+                        {
+                          "name": "env",
+                          "count": "[length(parameters('wrappedMcpServers')[copyIndex()].envVars)]",
+                          "input": {
+                            "name": "[parameters('wrappedMcpServers')[copyIndex()].envVars[copyIndex('env')].name]",
+                            "secretRef": "[toLower(replace(parameters('wrappedMcpServers')[copyIndex()].envVars[copyIndex('env')].name, '_', '-'))]"
+                          }
+                        }
+                      ],
+                      "name": "[parameters('wrappedMcpServers')[copyIndex()].name]",
+                      "image": "[format('{0}/{1}:latest', parameters('acrLoginServer'), parameters('wrappedMcpServers')[copyIndex()].imageName)]",
+                      "resources": {
+                        "cpu": "[json('0.5')]",
+                        "memory": "1Gi"
+                      }
+                    }
+                  ],
+                  "scale": {
+                    "minReplicas": 0,
+                    "maxReplicas": 3,
+                    "rules": [
+                      {
+                        "name": "http-scaling",
+                        "http": {
+                          "metadata": {
+                            "concurrentRequests": "10"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.App/managedEnvironments', format('{0}-cae', parameters('baseName')))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "containerAppsEnvId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.App/managedEnvironments', format('{0}-cae', parameters('baseName')))]"
+            },
+            "containerAppFqdns": {
+              "type": "array",
+              "copy": {
+                "count": "[length(parameters('wrappedMcpServers'))]",
+                "input": {
+                  "name": "[parameters('wrappedMcpServers')[copyIndex()].name]",
+                  "fqdn": "[reference(resourceId('Microsoft.App/containerApps', format('{0}-{1}', parameters('baseName'), parameters('wrappedMcpServers')[copyIndex()].name)), '2024-03-01').configuration.ingress.fqdn]",
+                  "url": "[format('https://{0}', reference(resourceId('Microsoft.App/containerApps', format('{0}-{1}', parameters('baseName'), parameters('wrappedMcpServers')[copyIndex()].name)), '2024-03-01').configuration.ingress.fqdn)]"
+                }
+              }
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'container-registry')]",
+        "[resourceId('Microsoft.Resources/deployments', 'monitoring')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "apim-logger",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "apimName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'apim'), '2025-04-01').outputs.apimName.value]"
+          },
+          "appInsightsInstrumentationKey": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'monitoring'), '2025-04-01').outputs.appInsightsInstrumentationKey.value]"
+          },
+          "appInsightsId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'monitoring'), '2025-04-01').outputs.appInsightsId.value]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "11051342894280280103"
+            }
+          },
+          "parameters": {
+            "apimName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the existing APIM instance."
+              }
+            },
+            "appInsightsInstrumentationKey": {
+              "type": "string",
+              "metadata": {
+                "description": "Application Insights instrumentation key."
+              }
+            },
+            "appInsightsId": {
+              "type": "string",
+              "metadata": {
+                "description": "Application Insights resource ID."
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.ApiManagement/service/loggers",
+              "apiVersion": "2024-06-01-preview",
+              "name": "[format('{0}/{1}', parameters('apimName'), 'appinsights-logger')]",
+              "properties": {
+                "loggerType": "applicationInsights",
+                "resourceId": "[parameters('appInsightsId')]",
+                "credentials": {
+                  "instrumentationKey": "[parameters('appInsightsInstrumentationKey')]"
+                }
+              }
+            },
+            {
+              "type": "Microsoft.ApiManagement/service/diagnostics",
+              "apiVersion": "2024-06-01-preview",
+              "name": "[format('{0}/{1}', parameters('apimName'), 'applicationinsights')]",
+              "properties": {
+                "loggerId": "[resourceId('Microsoft.ApiManagement/service/loggers', parameters('apimName'), 'appinsights-logger')]",
+                "alwaysLog": "allErrors",
+                "sampling": {
+                  "samplingType": "fixed",
+                  "percentage": 100
+                },
+                "frontend": {
+                  "request": {
+                    "headers": [
+                      "Mcp-Session-Id",
+                      "X-Forwarded-For"
+                    ],
+                    "body": {
+                      "bytes": 8192
+                    }
+                  },
+                  "response": {
+                    "headers": [
+                      "Content-Type"
+                    ],
+                    "body": {
+                      "bytes": 0
+                    }
+                  }
+                },
+                "backend": {
+                  "request": {
+                    "headers": [
+                      "Mcp-Session-Id"
+                    ],
+                    "body": {
+                      "bytes": 8192
+                    }
+                  },
+                  "response": {
+                    "headers": [
+                      "Content-Type"
+                    ],
+                    "body": {
+                      "bytes": 0
+                    }
+                  }
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service/loggers', parameters('apimName'), 'appinsights-logger')]"
+              ]
+            }
+          ],
+          "outputs": {
+            "loggerId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.ApiManagement/service/loggers', parameters('apimName'), 'appinsights-logger')]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'apim')]",
+        "[resourceId('Microsoft.Resources/deployments', 'monitoring')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "apim-named-values",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "apimName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'apim'), '2025-04-01').outputs.apimName.value]"
+          },
+          "entraIdTenantId": {
+            "value": "[parameters('entraIdTenantId')]"
+          },
+          "entraIdClientAppIds": {
+            "value": "[parameters('entraIdClientAppIds')]"
+          },
+          "approvedServers": {
+            "value": "[variables('approvedServers')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "16871111947824923011"
+            }
+          },
+          "parameters": {
+            "apimName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the existing APIM instance."
+              }
+            },
+            "entraIdTenantId": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Microsoft Entra ID tenant ID for token validation."
+              }
+            },
+            "entraIdClientAppIds": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Allowed client application IDs (comma-separated)."
+              }
+            },
+            "approvedServers": {
+              "type": "array",
+              "defaultValue": [],
+              "metadata": {
+                "description": "Approved MCP servers from the whitelist (may contain mcpPrimitives)."
+              }
+            }
+          },
+          "resources": [
+            {
+              "condition": "[not(empty(parameters('entraIdTenantId')))]",
+              "type": "Microsoft.ApiManagement/service/namedValues",
+              "apiVersion": "2024-06-01-preview",
+              "name": "[format('{0}/{1}', parameters('apimName'), 'entra-tenant-id')]",
+              "properties": {
+                "displayName": "entra-tenant-id",
+                "value": "[parameters('entraIdTenantId')]",
+                "secret": false
+              }
+            },
+            {
+              "condition": "[not(empty(parameters('entraIdClientAppIds')))]",
+              "type": "Microsoft.ApiManagement/service/namedValues",
+              "apiVersion": "2024-06-01-preview",
+              "name": "[format('{0}/{1}', parameters('apimName'), 'entra-client-app-ids')]",
+              "properties": {
+                "displayName": "entra-client-app-ids",
+                "value": "[parameters('entraIdClientAppIds')]",
+                "secret": false
+              }
+            },
+            {
+              "copy": {
+                "name": "mcpPrimitivesNamedValues",
+                "count": "[length(parameters('approvedServers'))]"
+              },
+              "condition": "[contains(parameters('approvedServers')[copyIndex()], 'mcpPrimitives')]",
+              "type": "Microsoft.Resources/deployments",
+              "apiVersion": "2025-04-01",
+              "name": "[format('nv-primitives-{0}', parameters('approvedServers')[copyIndex()].name)]",
+              "properties": {
+                "expressionEvaluationOptions": {
+                  "scope": "inner"
+                },
+                "mode": "Incremental",
+                "parameters": {
+                  "apimName": {
+                    "value": "[parameters('apimName')]"
+                  },
+                  "serverName": {
+                    "value": "[parameters('approvedServers')[copyIndex()].name]"
+                  },
+                  "mcpPrimitivesJson": {
+                    "value": "[string(parameters('approvedServers')[copyIndex()].mcpPrimitives)]"
+                  }
+                },
+                "template": {
+                  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+                  "contentVersion": "1.0.0.0",
+                  "metadata": {
+                    "_generator": {
+                      "name": "bicep",
+                      "version": "0.41.2.15936",
+                      "templateHash": "14853301329148444339"
+                    }
+                  },
+                  "parameters": {
+                    "apimName": {
+                      "type": "string",
+                      "metadata": {
+                        "description": "Name of the existing APIM instance."
+                      }
+                    },
+                    "serverName": {
+                      "type": "string",
+                      "metadata": {
+                        "description": "MCP server name (used as Named Value key)."
+                      }
+                    },
+                    "mcpPrimitivesJson": {
+                      "type": "string",
+                      "metadata": {
+                        "description": "JSON string of the mcpPrimitives filter configuration."
+                      }
+                    }
+                  },
+                  "resources": [
+                    {
+                      "type": "Microsoft.ApiManagement/service/namedValues",
+                      "apiVersion": "2024-06-01-preview",
+                      "name": "[format('{0}/{1}', parameters('apimName'), format('mcp-primitives-{0}', parameters('serverName')))]",
+                      "properties": {
+                        "displayName": "[format('mcp-primitives-{0}', parameters('serverName'))]",
+                        "value": "[parameters('mcpPrimitivesJson')]",
+                        "secret": false,
+                        "tags": [
+                          "mcp-primitives",
+                          "[parameters('serverName')]"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'apim')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "apim-products",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "apimName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'apim'), '2025-04-01').outputs.apimName.value]"
+          },
+          "profiles": {
+            "value": "[variables('profiles')]"
+          },
+          "mcpServers": {
+            "value": "[variables('mcpServers')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "15230348059961770292"
+            }
+          },
+          "parameters": {
+            "apimName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the existing APIM instance."
+              }
+            },
+            "profiles": {
+              "type": "array",
+              "metadata": {
+                "description": "Profile definitions from config/profiles.json."
+              }
+            },
+            "mcpServers": {
+              "type": "array",
+              "metadata": {
+                "description": "All MCP server definitions (used for wildcard resolution)."
+              }
+            }
+          },
+          "variables": {
+            "copy": [
+              {
+                "name": "allServerNames",
+                "count": "[length(parameters('mcpServers'))]",
+                "input": "[parameters('mcpServers')[copyIndex('allServerNames')].name]"
+              },
+              {
+                "name": "resolvedProfiles",
+                "count": "[length(parameters('profiles'))]",
+                "input": {
+                  "name": "[parameters('profiles')[copyIndex('resolvedProfiles')].name]",
+                  "displayName": "[parameters('profiles')[copyIndex('resolvedProfiles')].displayName]",
+                  "description": "[parameters('profiles')[copyIndex('resolvedProfiles')].description]",
+                  "servers": "[if(contains(parameters('profiles')[copyIndex('resolvedProfiles')].servers, '*'), variables('allServerNames'), parameters('profiles')[copyIndex('resolvedProfiles')].servers)]",
+                  "subscriptionsLimit": "[parameters('profiles')[copyIndex('resolvedProfiles')].subscriptionsLimit]",
+                  "approvalRequired": "[parameters('profiles')[copyIndex('resolvedProfiles')].approvalRequired]"
+                }
+              }
+            ]
+          },
+          "resources": [
+            {
+              "copy": {
+                "name": "products",
+                "count": "[length(variables('resolvedProfiles'))]"
+              },
+              "type": "Microsoft.ApiManagement/service/products",
+              "apiVersion": "2024-06-01-preview",
+              "name": "[format('{0}/{1}', parameters('apimName'), variables('resolvedProfiles')[copyIndex()].name)]",
+              "properties": {
+                "displayName": "[variables('resolvedProfiles')[copyIndex()].displayName]",
+                "description": "[variables('resolvedProfiles')[copyIndex()].description]",
+                "state": "published",
+                "subscriptionRequired": true,
+                "approvalRequired": "[variables('resolvedProfiles')[copyIndex()].approvalRequired]",
+                "subscriptionsLimit": "[variables('resolvedProfiles')[copyIndex()].subscriptionsLimit]"
+              }
+            },
+            {
+              "copy": {
+                "name": "subscriptions",
+                "count": "[length(variables('resolvedProfiles'))]"
+              },
+              "type": "Microsoft.ApiManagement/service/subscriptions",
+              "apiVersion": "2024-06-01-preview",
+              "name": "[format('{0}/{1}', parameters('apimName'), format('{0}-default-sub', variables('resolvedProfiles')[copyIndex()].name))]",
+              "properties": {
+                "scope": "[resourceId('Microsoft.ApiManagement/service/products', parameters('apimName'), variables('resolvedProfiles')[copyIndex()].name)]",
+                "displayName": "[format('{0} - Default Subscription', variables('resolvedProfiles')[copyIndex()].displayName)]",
+                "state": "active",
+                "allowTracing": true
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service/products', parameters('apimName'), variables('resolvedProfiles')[copyIndex()].name)]"
+              ]
+            },
+            {
+              "copy": {
+                "name": "productApis",
+                "count": "[length(variables('resolvedProfiles'))]"
+              },
+              "type": "Microsoft.Resources/deployments",
+              "apiVersion": "2025-04-01",
+              "name": "[format('product-apis-{0}', variables('resolvedProfiles')[copyIndex()].name)]",
+              "properties": {
+                "expressionEvaluationOptions": {
+                  "scope": "inner"
+                },
+                "mode": "Incremental",
+                "parameters": {
+                  "apimName": {
+                    "value": "[parameters('apimName')]"
+                  },
+                  "profileName": {
+                    "value": "[variables('resolvedProfiles')[copyIndex()].name]"
+                  },
+                  "serverNames": {
+                    "value": "[variables('resolvedProfiles')[copyIndex()].servers]"
+                  }
+                },
+                "template": {
+                  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+                  "contentVersion": "1.0.0.0",
+                  "metadata": {
+                    "_generator": {
+                      "name": "bicep",
+                      "version": "0.41.2.15936",
+                      "templateHash": "11134011688539007484"
+                    }
+                  },
+                  "parameters": {
+                    "apimName": {
+                      "type": "string",
+                      "metadata": {
+                        "description": "Name of the existing APIM instance."
+                      }
+                    },
+                    "profileName": {
+                      "type": "string",
+                      "metadata": {
+                        "description": "Product (profile) name."
+                      }
+                    },
+                    "serverNames": {
+                      "type": "array",
+                      "metadata": {
+                        "description": "Server names to associate with this product."
+                      }
+                    }
+                  },
+                  "resources": [
+                    {
+                      "copy": {
+                        "name": "apiProductAssociations",
+                        "count": "[length(parameters('serverNames'))]"
+                      },
+                      "type": "Microsoft.ApiManagement/service/products/apis",
+                      "apiVersion": "2024-06-01-preview",
+                      "name": "[format('{0}/{1}/{2}-api', parameters('apimName'), parameters('profileName'), parameters('serverNames')[copyIndex()])]"
+                    }
+                  ]
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service/products', parameters('apimName'), variables('resolvedProfiles')[copyIndex()].name)]"
+              ]
+            }
+          ],
+          "outputs": {
+            "productNames": {
+              "type": "array",
+              "copy": {
+                "count": "[length(variables('resolvedProfiles'))]",
+                "input": "[variables('resolvedProfiles')[copyIndex()].name]"
+              }
+            },
+            "productIds": {
+              "type": "array",
+              "copy": {
+                "count": "[length(variables('resolvedProfiles'))]",
+                "input": "[resourceId('Microsoft.ApiManagement/service/products', parameters('apimName'), variables('resolvedProfiles')[copyIndex()].name)]"
+              }
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'apim')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "apim-backends",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "apimName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'apim'), '2025-04-01').outputs.apimName.value]"
+          },
+          "mcpServers": {
+            "value": "[variables('mcpServers')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "445940939253009958"
+            }
+          },
+          "parameters": {
+            "apimName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the existing APIM instance."
+              }
+            },
+            "mcpServers": {
+              "type": "array",
+              "metadata": {
+                "description": "Array of MCP server definitions from config/mcp-servers.json."
+              }
+            }
+          },
+          "resources": [
+            {
+              "copy": {
+                "name": "backends",
+                "count": "[length(parameters('mcpServers'))]"
+              },
+              "type": "Microsoft.ApiManagement/service/backends",
+              "apiVersion": "2024-06-01-preview",
+              "name": "[format('{0}/{1}', parameters('apimName'), format('{0}-backend', parameters('mcpServers')[copyIndex()].name))]",
+              "properties": {
+                "title": "[parameters('mcpServers')[copyIndex()].displayName]",
+                "description": "[parameters('mcpServers')[copyIndex()].description]",
+                "url": "[parameters('mcpServers')[copyIndex()].backendUrl]",
+                "protocol": "http",
+                "tls": {
+                  "validateCertificateChain": true,
+                  "validateCertificateName": true
+                }
+              }
+            }
+          ],
+          "outputs": {
+            "backendNames": {
+              "type": "array",
+              "copy": {
+                "count": "[length(parameters('mcpServers'))]",
+                "input": "[format('{0}-backend', parameters('mcpServers')[copyIndex()].name)]"
+              }
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'apim')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "apim-apis",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "apimName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'apim'), '2025-04-01').outputs.apimName.value]"
+          },
+          "mcpServers": {
+            "value": "[variables('mcpServers')]"
+          },
+          "mcpPolicyXml": {
+            "value": "[variables('mcpPolicyXml')]"
+          },
+          "aoaiPolicyXml": {
+            "value": "[variables('aoaiPolicyXml')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "2442304240393886281"
+            }
+          },
+          "parameters": {
+            "apimName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the existing APIM instance."
+              }
+            },
+            "mcpServers": {
+              "type": "array",
+              "metadata": {
+                "description": "Array of MCP server definitions from config/mcp-servers.json."
+              }
+            },
+            "mcpPolicyXml": {
+              "type": "string",
+              "metadata": {
+                "description": "MCP passthrough policy XML content."
+              }
+            },
+            "aoaiPolicyXml": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure OpenAI policy XML content."
+              }
+            }
+          },
+          "resources": [
+            {
+              "copy": {
+                "name": "apis",
+                "count": "[length(parameters('mcpServers'))]"
+              },
+              "type": "Microsoft.ApiManagement/service/apis",
+              "apiVersion": "2024-06-01-preview",
+              "name": "[format('{0}/{1}', parameters('apimName'), format('{0}-api', parameters('mcpServers')[copyIndex()].name))]",
+              "properties": {
+                "displayName": "[parameters('mcpServers')[copyIndex()].displayName]",
+                "description": "[parameters('mcpServers')[copyIndex()].description]",
+                "path": "[parameters('mcpServers')[copyIndex()].basePath]",
+                "serviceUrl": "[parameters('mcpServers')[copyIndex()].backendUrl]",
+                "protocols": [
+                  "https"
+                ],
+                "subscriptionRequired": true,
+                "subscriptionKeyParameterNames": {
+                  "header": "Ocp-Apim-Subscription-Key",
+                  "query": "subscription-key"
+                },
+                "isCurrent": true
+              }
+            },
+            {
+              "copy": {
+                "name": "mcpWildcardGet",
+                "count": "[length(parameters('mcpServers'))]"
+              },
+              "condition": "[not(equals(parameters('mcpServers')[copyIndex()].type, 'azure-openai'))]",
+              "type": "Microsoft.ApiManagement/service/apis/operations",
+              "apiVersion": "2024-06-01-preview",
+              "name": "[format('{0}/{1}/{2}', parameters('apimName'), format('{0}-api', parameters('mcpServers')[copyIndex()].name), 'mcp-wildcard-get')]",
+              "properties": {
+                "displayName": "MCP Wildcard GET",
+                "method": "GET",
+                "urlTemplate": "/*"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), format('{0}-api', parameters('mcpServers')[copyIndex()].name))]"
+              ]
+            },
+            {
+              "copy": {
+                "name": "mcpWildcardPost",
+                "count": "[length(parameters('mcpServers'))]"
+              },
+              "condition": "[not(equals(parameters('mcpServers')[copyIndex()].type, 'azure-openai'))]",
+              "type": "Microsoft.ApiManagement/service/apis/operations",
+              "apiVersion": "2024-06-01-preview",
+              "name": "[format('{0}/{1}/{2}', parameters('apimName'), format('{0}-api', parameters('mcpServers')[copyIndex()].name), 'mcp-wildcard-post')]",
+              "properties": {
+                "displayName": "MCP Wildcard POST",
+                "method": "POST",
+                "urlTemplate": "/*"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), format('{0}-api', parameters('mcpServers')[copyIndex()].name))]"
+              ]
+            },
+            {
+              "copy": {
+                "name": "mcpWildcardDelete",
+                "count": "[length(parameters('mcpServers'))]"
+              },
+              "condition": "[not(equals(parameters('mcpServers')[copyIndex()].type, 'azure-openai'))]",
+              "type": "Microsoft.ApiManagement/service/apis/operations",
+              "apiVersion": "2024-06-01-preview",
+              "name": "[format('{0}/{1}/{2}', parameters('apimName'), format('{0}-api', parameters('mcpServers')[copyIndex()].name), 'mcp-wildcard-delete')]",
+              "properties": {
+                "displayName": "MCP Wildcard DELETE",
+                "method": "DELETE",
+                "urlTemplate": "/*"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), format('{0}-api', parameters('mcpServers')[copyIndex()].name))]"
+              ]
+            },
+            {
+              "copy": {
+                "name": "aoaiChatCompletions",
+                "count": "[length(parameters('mcpServers'))]"
+              },
+              "condition": "[equals(parameters('mcpServers')[copyIndex()].type, 'azure-openai')]",
+              "type": "Microsoft.ApiManagement/service/apis/operations",
+              "apiVersion": "2024-06-01-preview",
+              "name": "[format('{0}/{1}/{2}', parameters('apimName'), format('{0}-api', parameters('mcpServers')[copyIndex()].name), 'chat-completions')]",
+              "properties": {
+                "displayName": "Chat Completions",
+                "method": "POST",
+                "urlTemplate": "/deployments/{deployment-id}/chat/completions?api-version={api-version}",
+                "templateParameters": [
+                  {
+                    "name": "deployment-id",
+                    "required": true,
+                    "type": "string"
+                  },
+                  {
+                    "name": "api-version",
+                    "required": true,
+                    "type": "string"
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), format('{0}-api', parameters('mcpServers')[copyIndex()].name))]"
+              ]
+            },
+            {
+              "copy": {
+                "name": "aoaiEmbeddings",
+                "count": "[length(parameters('mcpServers'))]"
+              },
+              "condition": "[equals(parameters('mcpServers')[copyIndex()].type, 'azure-openai')]",
+              "type": "Microsoft.ApiManagement/service/apis/operations",
+              "apiVersion": "2024-06-01-preview",
+              "name": "[format('{0}/{1}/{2}', parameters('apimName'), format('{0}-api', parameters('mcpServers')[copyIndex()].name), 'embeddings')]",
+              "properties": {
+                "displayName": "Embeddings",
+                "method": "POST",
+                "urlTemplate": "/deployments/{deployment-id}/embeddings?api-version={api-version}",
+                "templateParameters": [
+                  {
+                    "name": "deployment-id",
+                    "required": true,
+                    "type": "string"
+                  },
+                  {
+                    "name": "api-version",
+                    "required": true,
+                    "type": "string"
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), format('{0}-api', parameters('mcpServers')[copyIndex()].name))]"
+              ]
+            },
+            {
+              "copy": {
+                "name": "mcpApiPolicies",
+                "count": "[length(parameters('mcpServers'))]"
+              },
+              "condition": "[not(equals(parameters('mcpServers')[copyIndex()].type, 'azure-openai'))]",
+              "type": "Microsoft.ApiManagement/service/apis/policies",
+              "apiVersion": "2024-06-01-preview",
+              "name": "[format('{0}/{1}/{2}', parameters('apimName'), format('{0}-api', parameters('mcpServers')[copyIndex()].name), 'policy')]",
+              "properties": {
+                "format": "rawxml",
+                "value": "[parameters('mcpPolicyXml')]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), format('{0}-api', parameters('mcpServers')[copyIndex()].name))]"
+              ]
+            },
+            {
+              "copy": {
+                "name": "aoaiApiPolicies",
+                "count": "[length(parameters('mcpServers'))]"
+              },
+              "condition": "[equals(parameters('mcpServers')[copyIndex()].type, 'azure-openai')]",
+              "type": "Microsoft.ApiManagement/service/apis/policies",
+              "apiVersion": "2024-06-01-preview",
+              "name": "[format('{0}/{1}/{2}', parameters('apimName'), format('{0}-api', parameters('mcpServers')[copyIndex()].name), 'policy')]",
+              "properties": {
+                "format": "rawxml",
+                "value": "[parameters('aoaiPolicyXml')]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), format('{0}-api', parameters('mcpServers')[copyIndex()].name))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "apiNames": {
+              "type": "array",
+              "copy": {
+                "count": "[length(parameters('mcpServers'))]",
+                "input": "[format('{0}-api', parameters('mcpServers')[copyIndex()].name)]"
+              }
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'apim')]",
+        "[resourceId('Microsoft.Resources/deployments', 'apim-backends')]",
+        "[resourceId('Microsoft.Resources/deployments', 'apim-logger')]"
+      ]
+    },
+    {
+      "condition": "[parameters('deployApiCenter')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "api-center",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "baseName": {
+            "value": "[parameters('baseName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "tags": {
+            "value": "[variables('tags')]"
+          },
+          "mcpServers": {
+            "value": "[variables('mcpServers')]"
+          },
+          "apimGatewayUrl": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'apim'), '2025-04-01').outputs.apimGatewayUrl.value]"
+          },
+          "profiles": {
+            "value": "[variables('profiles')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "8289146749248651999"
+            }
+          },
+          "parameters": {
+            "baseName": {
+              "type": "string",
+              "metadata": {
+                "description": "Base name for all resources."
+              }
+            },
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for deployment."
+              }
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Resource tags."
+              }
+            },
+            "mcpServers": {
+              "type": "array",
+              "metadata": {
+                "description": "Array of MCP server definitions from config/mcp-servers.json."
+              }
+            },
+            "apimGatewayUrl": {
+              "type": "string",
+              "metadata": {
+                "description": "APIM gateway URL for linking APIs to their deployments."
+              }
+            },
+            "profiles": {
+              "type": "array",
+              "defaultValue": [],
+              "metadata": {
+                "description": "Array of profile definitions from config/profiles.json."
+              }
+            }
+          },
+          "variables": {
+            "apiCenterName": "[format('{0}-apic', parameters('baseName'))]"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.ApiCenter/services",
+              "apiVersion": "2024-03-01",
+              "name": "[variables('apiCenterName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "identity": {
+                "type": "SystemAssigned"
+              }
+            },
+            {
+              "type": "Microsoft.ApiCenter/services/workspaces",
+              "apiVersion": "2024-03-01",
+              "name": "[format('{0}/{1}', variables('apiCenterName'), 'default')]",
+              "properties": {
+                "title": "Default",
+                "description": "Default workspace for MCP API catalog."
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiCenter/services', variables('apiCenterName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.ApiCenter/services/workspaces/environments",
+              "apiVersion": "2024-03-01",
+              "name": "[format('{0}/{1}/{2}', variables('apiCenterName'), 'default', 'apim-gateway')]",
+              "properties": {
+                "title": "APIM AI Gateway",
+                "description": "Azure API Management AI Gateway exposing governed MCP Tools.",
+                "kind": "development",
+                "server": {
+                  "type": "Azure API Management",
+                  "managementPortalUri": [
+                    "[replace(parameters('apimGatewayUrl'), '.azure-api.net', '.management.azure-api.net')]"
+                  ]
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiCenter/services/workspaces', variables('apiCenterName'), 'default')]"
+              ]
+            },
+            {
+              "type": "Microsoft.ApiCenter/services/metadataSchemas",
+              "apiVersion": "2024-03-01",
+              "name": "[format('{0}/{1}', variables('apiCenterName'), 'mcp-profiles')]",
+              "properties": {
+                "schema": "{\"type\":\"string\",\"title\":\"MCP Profiles\",\"description\":\"Profiles that include this API\",\"enum\":[\"all-mcp-tools\",\"developer\",\"business-analyst\",\"app-1\",\"app-2\"]}",
+                "assignedTo": [
+                  {
+                    "entity": "api",
+                    "required": false
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiCenter/services', variables('apiCenterName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.ApiCenter/services/metadataSchemas",
+              "apiVersion": "2024-03-01",
+              "name": "[format('{0}/{1}', variables('apiCenterName'), 'mcp-transport')]",
+              "properties": {
+                "schema": "{\"type\":\"string\",\"title\":\"MCP Transport\",\"description\":\"Transport protocol used by this MCP server\",\"enum\":[\"streamable-http\",\"https\",\"stdio-wrapped\"]}",
+                "assignedTo": [
+                  {
+                    "entity": "api",
+                    "required": false
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiCenter/services', variables('apiCenterName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.ApiCenter/services/metadataSchemas",
+              "apiVersion": "2024-03-01",
+              "name": "[format('{0}/{1}', variables('apiCenterName'), 'mcp-registry-profile')]",
+              "properties": {
+                "schema": "{\"type\":\"string\",\"title\":\"MCP Registry Profile\",\"description\":\"Profile used as registry name for GitHub MCP Allowlist integration\"}",
+                "assignedTo": [
+                  {
+                    "entity": "api",
+                    "required": false
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiCenter/services', variables('apiCenterName'))]"
+              ]
+            },
+            {
+              "copy": {
+                "name": "apiCenterApis",
+                "count": "[length(parameters('mcpServers'))]"
+              },
+              "type": "Microsoft.ApiCenter/services/workspaces/apis",
+              "apiVersion": "2024-03-01",
+              "name": "[format('{0}/{1}/{2}', variables('apiCenterName'), 'default', parameters('mcpServers')[copyIndex()].name)]",
+              "properties": {
+                "title": "[parameters('mcpServers')[copyIndex()].displayName]",
+                "description": "[parameters('mcpServers')[copyIndex()].description]",
+                "kind": "[if(equals(parameters('mcpServers')[copyIndex()].type, 'azure-openai'), 'rest', 'rest')]",
+                "lifecycleStage": "production",
+                "externalDocumentation": [
+                  {
+                    "title": "Gateway Endpoint",
+                    "url": "[format('{0}/{1}', parameters('apimGatewayUrl'), parameters('mcpServers')[copyIndex()].basePath)]"
+                  }
+                ],
+                "customProperties": {
+                  "mcp-transport": "[parameters('mcpServers')[copyIndex()].transport]"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiCenter/services/workspaces', variables('apiCenterName'), 'default')]"
+              ]
+            },
+            {
+              "copy": {
+                "name": "apiVersions",
+                "count": "[length(parameters('mcpServers'))]"
+              },
+              "type": "Microsoft.ApiCenter/services/workspaces/apis/versions",
+              "apiVersion": "2024-03-01",
+              "name": "[format('{0}/{1}/{2}/{3}', variables('apiCenterName'), 'default', parameters('mcpServers')[copyIndex()].name, 'v1')]",
+              "properties": {
+                "title": "v1"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiCenter/services/workspaces/apis', variables('apiCenterName'), 'default', parameters('mcpServers')[copyIndex()].name)]"
+              ]
+            },
+            {
+              "copy": {
+                "name": "apiDeployments",
+                "count": "[length(parameters('mcpServers'))]"
+              },
+              "type": "Microsoft.ApiCenter/services/workspaces/apis/deployments",
+              "apiVersion": "2024-03-01",
+              "name": "[format('{0}/{1}/{2}/{3}', variables('apiCenterName'), 'default', parameters('mcpServers')[copyIndex()].name, format('{0}-apim', parameters('mcpServers')[copyIndex()].name))]",
+              "properties": {
+                "title": "APIM Gateway",
+                "description": "Deployed via Azure API Management AI Gateway.",
+                "environmentId": "[resourceId('Microsoft.ApiCenter/services/workspaces/environments', variables('apiCenterName'), 'default', 'apim-gateway')]",
+                "server": {
+                  "runtimeUri": [
+                    "[format('{0}/{1}', parameters('apimGatewayUrl'), parameters('mcpServers')[copyIndex()].basePath)]"
+                  ]
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiCenter/services/workspaces/apis', variables('apiCenterName'), 'default', parameters('mcpServers')[copyIndex()].name)]",
+                "[resourceId('Microsoft.ApiCenter/services/workspaces/environments', variables('apiCenterName'), 'default', 'apim-gateway')]"
+              ]
+            }
+          ],
+          "outputs": {
+            "apiCenterName": {
+              "type": "string",
+              "value": "[variables('apiCenterName')]"
+            },
+            "apiCenterPortalUrl": {
+              "type": "string",
+              "value": "[format('https://{0}.data.{1}.azure-apicenter.ms', variables('apiCenterName'), parameters('location'))]"
+            },
+            "mcpRegistryBaseUrl": {
+              "type": "string",
+              "value": "[format('https://{0}.data.{1}.azure-apicenter.ms', variables('apiCenterName'), parameters('location'))]"
+            },
+            "mcpRegistryProfiles": {
+              "type": "array",
+              "copy": {
+                "count": "[length(parameters('profiles'))]",
+                "input": {
+                  "name": "[parameters('profiles')[copyIndex()].name]",
+                  "displayName": "[parameters('profiles')[copyIndex()].displayName]",
+                  "registryUrl": "[format('https://{0}.data.{1}.azure-apicenter.ms', variables('apiCenterName'), parameters('location'))]"
+                }
+              }
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'apim')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "apim-global-policy",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "apimName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'apim'), '2025-04-01').outputs.apimName.value]"
+          },
+          "globalPolicyXml": {
+            "value": "[variables('globalPolicyXml')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "14805789677621231469"
+            }
+          },
+          "parameters": {
+            "apimName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the existing APIM instance."
+              }
+            },
+            "globalPolicyXml": {
+              "type": "string",
+              "metadata": {
+                "description": "Global policy XML content."
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.ApiManagement/service/policies",
+              "apiVersion": "2024-06-01-preview",
+              "name": "[format('{0}/{1}', parameters('apimName'), 'policy')]",
+              "properties": {
+                "format": "rawxml",
+                "value": "[parameters('globalPolicyXml')]"
+              }
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'apim')]",
+        "[resourceId('Microsoft.Resources/deployments', 'apim-apis')]"
+      ]
+    }
+  ],
+  "outputs": {
+    "apimGatewayUrl": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'apim'), '2025-04-01').outputs.apimGatewayUrl.value]"
+    },
+    "apimName": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'apim'), '2025-04-01').outputs.apimName.value]"
+    },
+    "apimPrincipalId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'apim'), '2025-04-01').outputs.apimPrincipalId.value]"
+    },
+    "mcpServerEndpoints": {
+      "type": "array",
+      "copy": {
+        "count": "[length(variables('mcpServers'))]",
+        "input": {
+          "name": "[variables('mcpServers')[copyIndex()].name]",
+          "displayName": "[variables('mcpServers')[copyIndex()].displayName]",
+          "endpoint": "[format('{0}/{1}', reference(resourceId('Microsoft.Resources/deployments', 'apim'), '2025-04-01').outputs.apimGatewayUrl.value, variables('mcpServers')[copyIndex()].basePath)]"
+        }
+      }
+    },
+    "appInsightsConnectionString": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'monitoring'), '2025-04-01').outputs.appInsightsConnectionString.value]"
+    },
+    "logAnalyticsWorkspaceId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'monitoring'), '2025-04-01').outputs.logAnalyticsWorkspaceId.value]"
+    },
+    "acrLoginServer": {
+      "type": "string",
+      "value": "[if(parameters('deployWrappedServers'), reference(resourceId('Microsoft.Resources/deployments', 'container-registry'), '2025-04-01').outputs.acrLoginServer.value, '')]"
+    },
+    "mcpRegistryBaseUrl": {
+      "type": "string",
+      "value": "[if(parameters('deployApiCenter'), reference(resourceId('Microsoft.Resources/deployments', 'api-center'), '2025-04-01').outputs.mcpRegistryBaseUrl.value, '')]"
+    },
+    "containerAppFqdns": {
+      "type": "array",
+      "value": "[if(parameters('deployWrappedServers'), reference(resourceId('Microsoft.Resources/deployments', 'container-apps'), '2025-04-01').outputs.containerAppFqdns.value, createArray())]"
+    },
+    "apiCenterName": {
+      "type": "string",
+      "value": "[if(parameters('deployApiCenter'), reference(resourceId('Microsoft.Resources/deployments', 'api-center'), '2025-04-01').outputs.apiCenterName.value, '')]"
+    },
+    "apiCenterPortalUrl": {
+      "type": "string",
+      "value": "[if(parameters('deployApiCenter'), reference(resourceId('Microsoft.Resources/deployments', 'api-center'), '2025-04-01').outputs.apiCenterPortalUrl.value, '')]"
+    }
+  }
+}

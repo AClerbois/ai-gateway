@@ -1,0 +1,141 @@
+name: Deploy APIM MCP Gateway
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'infra/**'
+      - 'policies/**'
+      - 'config/**'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AZURE_RESOURCE_GROUP: rg-apim-mcp-${{ github.event.inputs.environment || 'dev' }}
+  AZURE_LOCATION: westeurope
+
+jobs:
+  whitelist:
+    name: Validate MCP Whitelist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate MCP Whitelist (JSON Schema)
+        run: |
+          echo "Validating mcp-whitelist.json schema..."
+          python3 -c "
+          import json, sys
+          with open('config/mcp-whitelist.json') as f:
+              data = json.load(f)
+          required = ['metadata', 'approvedServers', 'policies']
+          missing = [k for k in required if k not in data]
+          if missing:
+              print(f'ERROR: Missing required keys: {missing}')
+              sys.exit(1)
+          for s in data['approvedServers']:
+              for k in ['name', 'publisher', 'source', 'securityReview']:
+                  if k not in s:
+                      print(f'ERROR: Server {s.get(\"name\",\"?\")} missing key: {k}')
+                      sys.exit(1)
+          print(f'Schema OK — {len(data[\"approvedServers\"])} approved, {len(data.get(\"blockedServers\",[]))} blocked.')
+          "
+
+      - name: Validate Servers Against Whitelist
+        shell: pwsh
+        run: |
+          ./scripts/validate-mcp-whitelist.ps1 `
+            -ConfigPath "./config" `
+            -Environment "${{ github.event.inputs.environment || 'dev' }}" `
+            -Strict:${{ github.event.inputs.environment == 'prod' && 'true' || 'false' }}
+
+  validate:
+    name: Validate Bicep
+    needs: whitelist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build Bicep
+        run: az bicep build --file infra/main.bicep
+
+      - name: What-If
+        run: |
+          az deployment group what-if \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --template-file infra/main.bicep \
+            --parameters infra/main.bicepparam
+
+  deploy:
+    name: Deploy Infrastructure
+    needs: [whitelist, validate]
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'dev' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy Bicep
+        id: deploy
+        run: |
+          az deployment group create \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --template-file infra/main.bicep \
+            --parameters infra/main.bicepparam \
+            --name "apim-mcp-$(date +%Y%m%d-%H%M%S)" \
+            --query "properties.outputs" \
+            --output json > deployment-outputs.json
+
+      - name: Display Outputs
+        run: |
+          echo "## Deployment Outputs" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          cat deployment-outputs.json >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Generate MCP Registry (per profile)
+        shell: pwsh
+        run: |
+          $gatewayUrl = (Get-Content deployment-outputs.json | ConvertFrom-Json).apimGatewayUrl.value
+          ./scripts/generate-mcp-registry.ps1 `
+            -ConfigPath "./config" `
+            -OutputPath "./output/registry" `
+            -ApimGatewayUrl $gatewayUrl
+
+      - name: Upload MCP Registry Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcp-registry
+          path: output/registry/
+
+      - name: Upload Outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-outputs
+          path: deployment-outputs.json

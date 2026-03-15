@@ -1,0 +1,253 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MCP Whitelist Registry",
+  "description": "Schema for the MCP Server whitelisting registry used to govern which MCP servers are allowed through the APIM gateway.",
+  "type": "object",
+  "required": ["metadata", "approvedServers", "policies"],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "metadata": {
+      "type": "object",
+      "required": ["version", "lastUpdated"],
+      "properties": {
+        "version": {
+          "type": "string",
+          "description": "Registry schema version.",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$"
+        },
+        "description": {
+          "type": "string"
+        },
+        "lastUpdated": {
+          "type": "string",
+          "format": "date",
+          "description": "Date of last update (YYYY-MM-DD)."
+        },
+        "maintainers": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Emails or handles of registry maintainers."
+        }
+      }
+    },
+    "approvedServers": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/approvedServer"
+      }
+    },
+    "blockedServers": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/blockedServer"
+      }
+    },
+    "policies": {
+      "$ref": "#/definitions/policies"
+    }
+  },
+  "definitions": {
+    "approvedServer": {
+      "type": "object",
+      "required": ["name", "publisher", "source", "sourceType", "transport", "securityReview"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Unique server identifier — must match `name` in mcp-servers.json."
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "publisher": {
+          "type": "string",
+          "description": "Organization or person publishing the MCP server."
+        },
+        "source": {
+          "type": "string",
+          "description": "Source URL or package identifier (e.g., npm:@scope/package, GitHub URL, managed service URL)."
+        },
+        "sourceType": {
+          "type": "string",
+          "enum": ["managed-service", "internal", "open-source", "commercial"],
+          "description": "Origin type for risk classification."
+        },
+        "transport": {
+          "type": "string",
+          "enum": ["streamable-http", "stdio", "sse", "https"],
+          "description": "Native transport of the MCP server."
+        },
+        "approvedVersions": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Approved version ranges. Use [\"*\"] for managed services."
+        },
+        "securityReview": {
+          "$ref": "#/definitions/securityReview"
+        },
+        "restrictions": {
+          "$ref": "#/definitions/restrictions"
+        },
+        "mcpPrimitives": {
+          "$ref": "#/definitions/mcpPrimitives",
+          "description": "Granular filtering of MCP tools, prompts, and resources."
+        }
+      }
+    },
+    "securityReview": {
+      "type": "object",
+      "required": ["status", "reviewedBy", "reviewDate"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["approved", "conditional", "pending", "rejected"],
+          "description": "Current review status."
+        },
+        "reviewedBy": {
+          "type": "string",
+          "description": "Team or person who performed the review."
+        },
+        "reviewDate": {
+          "type": "string",
+          "format": "date"
+        },
+        "nextReviewDate": {
+          "type": "string",
+          "format": "date"
+        },
+        "riskLevel": {
+          "type": "string",
+          "enum": ["low", "medium", "high", "critical"]
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "restrictions": {
+      "type": "object",
+      "properties": {
+        "maxRateLimitPerMinute": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxTokensPerMinute": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "allowedProfiles": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Profiles allowed to use this server. [\"*\"] for all."
+        },
+        "requireEntraAuth": {
+          "type": "boolean"
+        },
+        "requiredSecrets": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Secrets/env vars required for this server."
+        }
+      }
+    },
+    "blockedServer": {
+      "type": "object",
+      "required": ["name", "reason", "blockedDate"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Server name pattern (exact match or glob)."
+        },
+        "reason": {
+          "type": "string"
+        },
+        "blockedDate": {
+          "type": "string",
+          "format": "date"
+        },
+        "blockedBy": {
+          "type": "string"
+        }
+      }
+    },
+    "policies": {
+      "type": "object",
+      "required": ["defaultAction"],
+      "properties": {
+        "defaultAction": {
+          "type": "string",
+          "enum": ["deny", "allow"],
+          "description": "Action for servers not in the registry. 'deny' = whitelist mode."
+        },
+        "requireSecurityReview": {
+          "type": "boolean",
+          "description": "Require a security review before approval."
+        },
+        "maxReviewValidityDays": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum days a security review remains valid."
+        },
+        "autoBlockOnExpiredReview": {
+          "type": "boolean",
+          "description": "Automatically block servers with expired reviews."
+        },
+        "allowUnreviewedInDev": {
+          "type": "boolean",
+          "description": "Allow unreviewed servers in dev environments only."
+        },
+        "notifyOnExpiringSoon": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Days before review expiry to notify maintainers."
+        },
+        "mcpPrimitivesDefaults": {
+          "$ref": "#/definitions/mcpPrimitives",
+          "description": "Default MCP primitive filtering policy applied when a server has no explicit mcpPrimitives."
+        }
+      }
+    },
+    "mcpPrimitives": {
+      "type": "object",
+      "description": "Granular filtering rules for MCP tools, prompts, and resources.",
+      "properties": {
+        "tools": {
+          "$ref": "#/definitions/primitiveFilter"
+        },
+        "prompts": {
+          "$ref": "#/definitions/primitiveFilter"
+        },
+        "resources": {
+          "$ref": "#/definitions/primitiveFilter"
+        }
+      }
+    },
+    "primitiveFilter": {
+      "type": "object",
+      "required": ["policy"],
+      "description": "Filtering rule for a single MCP primitive type.",
+      "properties": {
+        "policy": {
+          "type": "string",
+          "enum": ["allowAll", "denyAll", "allowList", "denyList"],
+          "description": "allowAll: no filter. denyAll: block all. allowList: only listed names. denyList: block listed names."
+        },
+        "allowed": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Names allowed (only for policy=allowList)."
+        },
+        "denied": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Names denied (only for policy=denyList)."
+        },
+        "reason": {
+          "type": "string",
+          "description": "Reason shown when a primitive is blocked."
+        }
+      }
+    }
+  }
+}

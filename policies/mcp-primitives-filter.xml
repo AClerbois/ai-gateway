@@ -1,0 +1,149 @@
+<!--
+  MCP Primitives Filtering Policy
+  Inspects JSON-RPC 2.0 request body to enforce granular allow/deny rules
+  on MCP tools, prompts, and resources.
+
+  Applied per-API as a policy fragment. Reads filtering configuration from
+  APIM Named Values (set per server from mcp-whitelist.json mcpPrimitives).
+
+  Filtering logic:
+    - tools/call  → checks params.name against tools filter
+    - prompts/get → checks params.name against prompts filter
+    - resources/read → checks params.uri against resources filter
+    - tools/list, prompts/list, resources/list → allowed (discovery)
+    - Other methods (initialize, ping, etc.) → allowed
+
+  Named Value pattern: mcp-primitives-<serverName> = JSON string of mcpPrimitives
+  Example: mcp-primitives-github-mcp = {"tools":{"policy":"denyList","denied":["delete_repository"]}}
+-->
+<fragment>
+    <choose>
+        <when condition="@(context.Request.Method == "POST")">
+            <set-variable name="requestBody" value="@{
+                try {
+                    return context.Request.Body.As<string>(preserveContent: true);
+                } catch {
+                    return "";
+                }
+            }" />
+            <set-variable name="jsonRpcMethod" value="@{
+                var body = (string)context.Variables["requestBody"];
+                if (string.IsNullOrEmpty(body)) return "";
+                try {
+                    var json = Newtonsoft.Json.Linq.JObject.Parse(body);
+                    return json["method"]?.ToString() ?? "";
+                } catch {
+                    return "";
+                }
+            }" />
+            <choose>
+                <!-- Only filter tools/call, prompts/get, resources/read -->
+                <when condition="@{
+                    var method = (string)context.Variables["jsonRpcMethod"];
+                    return method == "tools/call" || method == "prompts/get" || method == "resources/read";
+                }">
+                    <set-variable name="primitiveName" value="@{
+                        var body = (string)context.Variables["requestBody"];
+                        var method = (string)context.Variables["jsonRpcMethod"];
+                        try {
+                            var json = Newtonsoft.Json.Linq.JObject.Parse(body);
+                            var parameters = json["params"];
+                            if (parameters == null) return "";
+                            if (method == "resources/read") {
+                                return parameters["uri"]?.ToString() ?? "";
+                            }
+                            return parameters["name"]?.ToString() ?? "";
+                        } catch {
+                            return "";
+                        }
+                    }" />
+                    <set-variable name="primitiveType" value="@{
+                        var method = (string)context.Variables["jsonRpcMethod"];
+                        if (method == "tools/call") return "tools";
+                        if (method == "prompts/get") return "prompts";
+                        if (method == "resources/read") return "resources";
+                        return "";
+                    }" />
+                    <set-variable name="filterResult" value="@{
+                        var primitiveType = (string)context.Variables["primitiveType"];
+                        var primitiveName = (string)context.Variables["primitiveName"];
+                        if (string.IsNullOrEmpty(primitiveName)) return "allow";
+
+                        // Read the per-server filter config from named value
+                        string configKey = "mcp-primitives-" + context.Api.Id.Replace("-api", "");
+                        string configJson = "";
+                        try {
+                            configJson = context.Variables.ContainsKey(configKey)
+                                ? (string)context.Variables[configKey]
+                                : "";
+                        } catch {
+                            return "allow";
+                        }
+
+                        if (string.IsNullOrEmpty(configJson)) return "allow";
+
+                        try {
+                            var config = Newtonsoft.Json.Linq.JObject.Parse(configJson);
+                            var filter = config[primitiveType];
+                            if (filter == null) return "allow";
+
+                            var policy = filter["policy"]?.ToString() ?? "allowAll";
+
+                            if (policy == "denyAll") return "deny";
+                            if (policy == "allowAll") return "allow";
+
+                            if (policy == "denyList") {
+                                var denied = filter["denied"]?.ToObject<string[]>() ?? new string[0];
+                                foreach (var d in denied) {
+                                    if (d.EndsWith("*")) {
+                                        if (primitiveName.StartsWith(d.TrimEnd('*'))) return "deny";
+                                    } else {
+                                        if (primitiveName == d) return "deny";
+                                    }
+                                }
+                                return "allow";
+                            }
+
+                            if (policy == "allowList") {
+                                var allowed = filter["allowed"]?.ToObject<string[]>() ?? new string[0];
+                                foreach (var a in allowed) {
+                                    if (a.EndsWith("*")) {
+                                        if (primitiveName.StartsWith(a.TrimEnd('*'))) return "allow";
+                                    } else {
+                                        if (primitiveName == a) return "allow";
+                                    }
+                                }
+                                return "deny";
+                            }
+
+                            return "allow";
+                        } catch {
+                            return "allow";
+                        }
+                    }" />
+                    <choose>
+                        <when condition="@((string)context.Variables["filterResult"] == "deny")">
+                            <return-response>
+                                <set-status code="403" reason="Forbidden" />
+                                <set-header name="Content-Type" exists-action="override">
+                                    <value>application/json</value>
+                                </set-header>
+                                <set-body>@{
+                                    var body = (string)context.Variables["requestBody"];
+                                    var id = "null";
+                                    try {
+                                        var json = Newtonsoft.Json.Linq.JObject.Parse(body);
+                                        id = json["id"]?.ToString() ?? "null";
+                                    } catch {}
+                                    var primitiveType = (string)context.Variables["primitiveType"];
+                                    var primitiveName = (string)context.Variables["primitiveName"];
+                                    return "{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"error\":{\"code\":-32600,\"message\":\"Blocked by governance policy: " + primitiveType + "/" + primitiveName + " is not allowed on this gateway.\"}}";
+                                }</set-body>
+                            </return-response>
+                        </when>
+                    </choose>
+                </when>
+            </choose>
+        </when>
+    </choose>
+</fragment>

@@ -1,0 +1,86 @@
+{
+  "mcpServers": [
+    {
+      "name": "mslearn-mcp",
+      "displayName": "Microsoft Learn MCP Server",
+      "description": "Official Microsoft Learn documentation MCP server providing search and fetch tools.",
+      "type": "third-party",
+      "backendUrl": "https://learn.microsoft.com/api/mcp",
+      "transport": "streamable-http",
+      "basePath": "mslearn-mcp",
+      "rateLimitPerMinute": 30
+    },
+    {
+      "name": "custom-mcp",
+      "displayName": "Custom MCP Server",
+      "description": "Internal custom MCP server hosted on Azure Container Apps or Azure Functions.",
+      "type": "custom",
+      "backendUrl": "https://my-custom-mcp.azurewebsites.net",
+      "transport": "streamable-http",
+      "basePath": "custom-mcp",
+      "rateLimitPerMinute": 60
+    },
+    {
+      "name": "aoai-api",
+      "displayName": "Azure OpenAI API",
+      "description": "Azure OpenAI Service endpoint for chat completions and embeddings.",
+      "type": "azure-openai",
+      "backendUrl": "https://my-aoai-instance.openai.azure.com/openai",
+      "transport": "https",
+      "basePath": "aoai-api",
+      "rateLimitPerMinute": 120,
+      "tokensPerMinute": 10000,
+      "modelDeploymentName": "gpt-4o"
+    },
+    {
+      "name": "github-mcp",
+      "displayName": "GitHub MCP Server",
+      "description": "GitHub operations via supergateway wrapper (stdio → Streamable HTTP).",
+      "type": "custom",
+      "backendUrl": "https://CONTAINER_APP_FQDN_PLACEHOLDER",
+      "transport": "streamable-http",
+      "basePath": "github-mcp",
+      "rateLimitPerMinute": 60
+    },
+    {
+      "name": "azuredevops-mcp",
+      "displayName": "Azure DevOps MCP Server",
+      "description": "Azure DevOps operations via supergateway wrapper (stdio → Streamable HTTP).",
+      "type": "custom",
+      "backendUrl": "https://CONTAINER_APP_FQDN_PLACEHOLDER",
+      "transport": "streamable-http",
+      "basePath": "azuredevops-mcp",
+      "rateLimitPerMinute": 60
+    },
+    {
+      "name": "terraform-mcp",
+      "displayName": "Terraform MCP Server",
+      "description": "Terraform provider docs and resources via supergateway wrapper (stdio → Streamable HTTP).",
+      "type": "custom",
+      "backendUrl": "https://CONTAINER_APP_FQDN_PLACEHOLDER",
+      "transport": "streamable-http",
+      "basePath": "terraform-mcp",
+      "rateLimitPerMinute": 60
+    },
+    {
+      "name": "snyk-mcp",
+      "displayName": "Snyk MCP Server",
+      "description": "Snyk security scanning via supergateway wrapper (stdio → Streamable HTTP).",
+      "type": "custom",
+      "backendUrl": "https://CONTAINER_APP_FQDN_PLACEHOLDER",
+      "transport": "streamable-http",
+      "basePath": "snyk-mcp",
+      "rateLimitPerMinute": 60
+    },
+    {
+      "name": "fluentui-blazor-mcp",
+      "displayName": "Fluent UI Blazor MCP Server",
+      "description": "Fluent UI Blazor component docs via supergateway wrapper (stdio → Streamable HTTP).",
+      "type": "custom",
+      "backendUrl": "https://CONTAINER_APP_FQDN_PLACEHOLDER",
+      "transport": "streamable-http",
+      "basePath": "fluentui-blazor-mcp",
+      "rateLimitPerMinute": 60
+    }
+  ]
+}

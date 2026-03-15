@@ -1,0 +1,154 @@
+<!--
+  MCP Passthrough Policy
+  Applied to MCP server APIs. Handles rate limiting, optional Entra ID
+  validation, MCP primitives filtering, and MCP protocol transparency
+  (Streamable HTTP / JSON-RPC 2.0).
+-->
+<policies>
+    <inbound>
+        <base />
+        <!--
+          Optional: Entra ID (Azure AD) token validation.
+          Uncomment the block below when OAuth 2.1 authentication is required.
+          Configure named values: entra-tenant-id, entra-client-app-ids.
+        -->
+        <!--
+        <validate-azure-ad-token tenant-id="{{entra-tenant-id}}" output-token-variable-name="jwt-token">
+            <client-application-ids>
+                <application-id>{{entra-client-app-ids}}</application-id>
+            </client-application-ids>
+        </validate-azure-ad-token>
+        -->
+        <!-- Rate limit per MCP session to prevent abuse -->
+        <rate-limit-by-key
+            calls="60"
+            renewal-period="60"
+            counter-key="@(context.Request.Headers.GetValueOrDefault("Mcp-Session-Id", context.Request.IpAddress))"
+            increment-condition="@(context.Response.StatusCode >= 200 && context.Response.StatusCode < 400)" />
+        <!-- Trace MCP-specific request details -->
+        <trace source="mcp-passthrough" severity="information">
+            <message>@{
+                var sessionId = context.Request.Headers.GetValueOrDefault("Mcp-Session-Id", "no-session");
+                return $"MCP Request | Session: {sessionId} | Method: {context.Request.Method} | Path: {context.Request.Url.Path}";
+            }</message>
+        </trace>
+        <!--
+          MCP Primitives Filtering (tools, prompts, resources).
+          Reads per-server filter config from Named Value: mcp-primitives-<serverName>.
+          If no Named Value exists, all primitives are allowed (passthrough).
+        -->
+        <choose>
+            <when condition="@(context.Request.Method == "POST")">
+                <set-variable name="mcp-request-body" value="@(context.Request.Body.As<string>(preserveContent: true))" />
+                <set-variable name="mcp-jsonrpc-method" value="@{
+                    var body = (string)context.Variables["mcp-request-body"];
+                    if (string.IsNullOrEmpty(body)) return "";
+                    try {
+                        var json = Newtonsoft.Json.Linq.JObject.Parse(body);
+                        return json["method"]?.ToString() ?? "";
+                    } catch { return ""; }
+                }" />
+                <choose>
+                    <when condition="@{
+                        var m = (string)context.Variables["mcp-jsonrpc-method"];
+                        return m == "tools/call" || m == "prompts/get" || m == "resources/read";
+                    }">
+                        <set-variable name="mcp-primitive-name" value="@{
+                            var body = (string)context.Variables["mcp-request-body"];
+                            var method = (string)context.Variables["mcp-jsonrpc-method"];
+                            try {
+                                var json = Newtonsoft.Json.Linq.JObject.Parse(body);
+                                var p = json["params"];
+                                if (p == null) return "";
+                                return method == "resources/read"
+                                    ? (p["uri"]?.ToString() ?? "")
+                                    : (p["name"]?.ToString() ?? "");
+                            } catch { return ""; }
+                        }" />
+                        <set-variable name="mcp-primitive-type" value="@{
+                            var m = (string)context.Variables["mcp-jsonrpc-method"];
+                            if (m == "tools/call") return "tools";
+                            if (m == "prompts/get") return "prompts";
+                            return "resources";
+                        }" />
+                        <set-variable name="mcp-filter-blocked" value="@{
+                            var primitiveType = (string)context.Variables["mcp-primitive-type"];
+                            var name = (string)context.Variables["mcp-primitive-name"];
+                            if (string.IsNullOrEmpty(name)) return "false";
+
+                            var serverName = context.Api.Id.Replace("-api", "");
+                            string configJson;
+                            try {
+                                configJson = "{{mcp-primitives-" + serverName + "}}";
+                            } catch {
+                                return "false";
+                            }
+                            if (string.IsNullOrEmpty(configJson) || configJson.StartsWith("{{")) return "false";
+
+                            try {
+                                var config = Newtonsoft.Json.Linq.JObject.Parse(configJson);
+                                var filter = config[primitiveType];
+                                if (filter == null) return "false";
+                                var policy = filter["policy"]?.ToString() ?? "allowAll";
+
+                                if (policy == "denyAll") return "true";
+                                if (policy == "allowAll") return "false";
+
+                                if (policy == "denyList") {
+                                    var denied = filter["denied"]?.ToObject<string[]>() ?? new string[0];
+                                    foreach (var d in denied) {
+                                        if (d.EndsWith("*") ? name.StartsWith(d.TrimEnd('*')) : name == d)
+                                            return "true";
+                                    }
+                                    return "false";
+                                }
+                                if (policy == "allowList") {
+                                    var allowed = filter["allowed"]?.ToObject<string[]>() ?? new string[0];
+                                    foreach (var a in allowed) {
+                                        if (a.EndsWith("*") ? name.StartsWith(a.TrimEnd('*')) : name == a)
+                                            return "false";
+                                    }
+                                    return "true";
+                                }
+                                return "false";
+                            } catch { return "false"; }
+                        }" />
+                        <choose>
+                            <when condition="@((string)context.Variables["mcp-filter-blocked"] == "true")">
+                                <return-response>
+                                    <set-status code="403" reason="Forbidden" />
+                                    <set-header name="Content-Type" exists-action="override">
+                                        <value>application/json</value>
+                                    </set-header>
+                                    <set-body>@{
+                                        var body = (string)context.Variables["mcp-request-body"];
+                                        var id = "null";
+                                        try { id = Newtonsoft.Json.Linq.JObject.Parse(body)["id"]?.ToString() ?? "null"; } catch {}
+                                        var pType = (string)context.Variables["mcp-primitive-type"];
+                                        var pName = (string)context.Variables["mcp-primitive-name"];
+                                        return $"{{\"jsonrpc\":\"2.0\",\"id\":{id},\"error\":{{\"code\":-32600,\"message\":\"Blocked by governance policy: {pType}/{pName} is not allowed on this gateway.\"}}}}";
+                                    }</set-body>
+                                </return-response>
+                            </when>
+                        </choose>
+                    </when>
+                </choose>
+            </when>
+        </choose>
+        <!-- Set backend to the configured MCP server -->
+        <set-backend-service backend-id="@(context.Api.Id.Replace("-api", "-backend"))" />
+    </inbound>
+    <backend>
+        <base />
+    </backend>
+    <outbound>
+        <base />
+        <!-- Ensure MCP Session ID is forwarded in response -->
+        <set-header name="Mcp-Session-Id" exists-action="skip">
+            <value>@(context.Request.Headers.GetValueOrDefault("Mcp-Session-Id", ""))</value>
+        </set-header>
+    </outbound>
+    <on-error>
+        <base />
+    </on-error>
+</policies>

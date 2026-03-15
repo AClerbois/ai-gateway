@@ -1,0 +1,65 @@
+{
+  "profiles": [
+    {
+      "name": "all-mcp-tools",
+      "displayName": "All MCP Tools",
+      "description": "Full access to all MCP servers — for administrators and platform teams.",
+      "servers": ["*"],
+      "subscriptionsLimit": 5,
+      "approvalRequired": true
+    },
+    {
+      "name": "developer",
+      "displayName": "Developer",
+      "description": "Development and DevOps tools: GitHub, Azure DevOps, Terraform, Snyk, Fluent UI Blazor, Azure OpenAI.",
+      "servers": [
+        "github-mcp",
+        "azuredevops-mcp",
+        "terraform-mcp",
+        "snyk-mcp",
+        "fluentui-blazor-mcp",
+        "aoai-api"
+      ],
+      "subscriptionsLimit": 10,
+      "approvalRequired": false
+    },
+    {
+      "name": "business-analyst",
+      "displayName": "Business Analyst",
+      "description": "Documentation and AI tools: Microsoft Learn, Custom MCP, Azure OpenAI.",
+      "servers": [
+        "mslearn-mcp",
+        "custom-mcp",
+        "aoai-api"
+      ],
+      "subscriptionsLimit": 10,
+      "approvalRequired": false
+    },
+    {
+      "name": "app-1",
+      "displayName": "Application 1",
+      "description": "MCP tools scoped to Application 1.",
+      "servers": [
+        "mslearn-mcp",
+        "custom-mcp",
+        "github-mcp",
+        "aoai-api"
+      ],
+      "subscriptionsLimit": 5,
+      "approvalRequired": true
+    },
+    {
+      "name": "app-2",
+      "displayName": "Application 2",
+      "description": "MCP tools scoped to Application 2.",
+      "servers": [
+        "mslearn-mcp",
+        "terraform-mcp",
+        "snyk-mcp",
+        "aoai-api"
+      ],
+      "subscriptionsLimit": 5,
+      "approvalRequired": true
+    }
+  ]
+}

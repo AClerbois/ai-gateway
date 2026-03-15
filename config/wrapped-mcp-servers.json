@@ -1,0 +1,67 @@
+{
+  "wrappedMcpServers": [
+    {
+      "name": "github-mcp",
+      "displayName": "GitHub MCP Server",
+      "description": "GitHub operations: repos, issues, PRs, code search. Wrapped from stdio via supergateway.",
+      "imageName": "github-mcp",
+      "dockerContext": "docker/github-mcp",
+      "envVars": [
+        {
+          "name": "GITHUB_PERSONAL_ACCESS_TOKEN",
+          "value": ""
+        }
+      ]
+    },
+    {
+      "name": "azuredevops-mcp",
+      "displayName": "Azure DevOps MCP Server",
+      "description": "Azure DevOps operations: repos, pipelines, work items. Wrapped from stdio via supergateway.",
+      "imageName": "azuredevops-mcp",
+      "dockerContext": "docker/azuredevops-mcp",
+      "envVars": [
+        {
+          "name": "AZURE_DEVOPS_ORG_URL",
+          "value": ""
+        },
+        {
+          "name": "AZURE_DEVOPS_AUTH_METHOD",
+          "value": "pat"
+        },
+        {
+          "name": "AZURE_DEVOPS_PAT",
+          "value": ""
+        }
+      ]
+    },
+    {
+      "name": "terraform-mcp",
+      "displayName": "Terraform MCP Server",
+      "description": "Terraform provider docs, resource lookup, module search. Wrapped from stdio via supergateway.",
+      "imageName": "terraform-mcp",
+      "dockerContext": "docker/terraform-mcp",
+      "envVars": []
+    },
+    {
+      "name": "snyk-mcp",
+      "displayName": "Snyk MCP Server",
+      "description": "Snyk security scanning: vulnerabilities, license issues. Wrapped from stdio via supergateway.",
+      "imageName": "snyk-mcp",
+      "dockerContext": "docker/snyk-mcp",
+      "envVars": [
+        {
+          "name": "SNYK_TOKEN",
+          "value": ""
+        }
+      ]
+    },
+    {
+      "name": "fluentui-blazor-mcp",
+      "displayName": "Fluent UI Blazor MCP Server",
+      "description": "Fluent UI Blazor component docs: 142+ components, 10 tools, 9 resources. Wrapped from stdio via supergateway.",
+      "imageName": "fluentui-blazor-mcp",
+      "dockerContext": "docker/fluentui-blazor-mcp",
+      "envVars": []
+    }
+  ]
+}

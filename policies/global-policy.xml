@@ -1,0 +1,57 @@
+<!--
+  Global APIM Policy
+  Applied to all APIs. Handles CORS, request metrics, and tracing.
+-->
+<policies>
+    <inbound>
+        <base />
+        <!-- CORS for local development (VS Code / MCP clients) -->
+        <cors allow-credentials="true">
+            <allowed-origins>
+                <origin>http://localhost:3000</origin>
+                <origin>https://portal.azure.com</origin>
+                <origin>https://vscode.dev</origin>
+            </allowed-origins>
+            <allowed-methods preflight-result-max-age="300">
+                <method>GET</method>
+                <method>POST</method>
+                <method>DELETE</method>
+                <method>OPTIONS</method>
+            </allowed-methods>
+            <allowed-headers>
+                <header>Content-Type</header>
+                <header>Authorization</header>
+                <header>Ocp-Apim-Subscription-Key</header>
+                <header>Mcp-Session-Id</header>
+                <header>Accept</header>
+            </allowed-headers>
+            <expose-headers>
+                <header>Mcp-Session-Id</header>
+                <header>Content-Type</header>
+            </expose-headers>
+        </cors>
+        <!-- Emit custom metric for request counting -->
+        <emit-metric name="mcp-gateway-requests" value="1" namespace="apim-mcp-gateway">
+            <dimension name="API ID" value="@(context.Api.Id)" />
+            <dimension name="Subscription ID" value="@(context.Subscription.Id)" />
+            <dimension name="Client IP" value="@(context.Request.IpAddress)" />
+            <dimension name="Operation" value="@(context.Operation.Id)" />
+        </emit-metric>
+        <!-- Tracing for diagnostics -->
+        <trace source="global-policy" severity="information">
+            <message>@($"Request: {context.Request.Method} {context.Request.Url.Path} | API: {context.Api.Name} | Subscription: {context.Subscription.Name}")</message>
+        </trace>
+    </inbound>
+    <backend>
+        <base />
+    </backend>
+    <outbound>
+        <base />
+    </outbound>
+    <on-error>
+        <base />
+        <trace source="global-policy" severity="error">
+            <message>@($"Error: {context.LastError.Message} | Reason: {context.LastError.Reason} | API: {context.Api.Name}")</message>
+        </trace>
+    </on-error>
+</policies>

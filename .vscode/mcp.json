@@ -1,0 +1,74 @@
+{
+	"servers": {
+		"Microsoft Learn MCP (via APIM Gateway)": {
+			"type": "http",
+			"url": "https://<YOUR-APIM-NAME>.azure-api.net/mslearn-mcp/mcp",
+			"headers": {
+				"Ocp-Apim-Subscription-Key": "${input:apimSubscriptionKey}"
+			}
+		},
+		"Custom MCP Server (via APIM Gateway)": {
+			"type": "http",
+			"url": "https://<YOUR-APIM-NAME>.azure-api.net/custom-mcp/mcp",
+			"headers": {
+				"Ocp-Apim-Subscription-Key": "${input:apimSubscriptionKey}"
+			}
+		},
+		"GitHub MCP (via APIM Gateway)": {
+			"type": "http",
+			"url": "https://<YOUR-APIM-NAME>.azure-api.net/github-mcp/mcp",
+			"headers": {
+				"Ocp-Apim-Subscription-Key": "${input:apimSubscriptionKey}"
+			}
+		},
+		"Azure DevOps MCP (via APIM Gateway)": {
+			"type": "http",
+			"url": "https://<YOUR-APIM-NAME>.azure-api.net/azuredevops-mcp/mcp",
+			"headers": {
+				"Ocp-Apim-Subscription-Key": "${input:apimSubscriptionKey}"
+			}
+		},
+		"Terraform MCP (via APIM Gateway)": {
+			"type": "http",
+			"url": "https://<YOUR-APIM-NAME>.azure-api.net/terraform-mcp/mcp",
+			"headers": {
+				"Ocp-Apim-Subscription-Key": "${input:apimSubscriptionKey}"
+			}
+		},
+		"Snyk MCP (via APIM Gateway)": {
+			"type": "http",
+			"url": "https://<YOUR-APIM-NAME>.azure-api.net/snyk-mcp/mcp",
+			"headers": {
+				"Ocp-Apim-Subscription-Key": "${input:apimSubscriptionKey}"
+			}
+		},
+		"Fluent UI Blazor MCP (via APIM Gateway)": {
+			"type": "http",
+			"url": "https://<YOUR-APIM-NAME>.azure-api.net/fluentui-blazor-mcp/mcp",
+			"headers": {
+				"Ocp-Apim-Subscription-Key": "${input:apimSubscriptionKey}"
+			}
+		},
+		"Microsoft Learn MCP (direct)": {
+			"url": "https://learn.microsoft.com/api/mcp",
+			"type": "http"
+		},
+		"Azure MCP Server": {
+			"command": "npx",
+			"args": [
+				"-y",
+				"@azure/mcp@latest",
+				"server",
+				"start"
+			]
+		}
+	},
+	"inputs": [
+		{
+			"id": "apimSubscriptionKey",
+			"type": "promptString",
+			"description": "Azure API Management subscription key (Ocp-Apim-Subscription-Key)",
+			"password": true
+		}
+	]
+}
