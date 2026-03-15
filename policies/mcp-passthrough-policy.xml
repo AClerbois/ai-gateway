@@ -40,9 +40,10 @@
         <choose>
             <when condition="@(context.Request.Method == "POST")">
                 <set-variable name="mcp-request-body" value="@(context.Request.Body.As<string>(preserveContent: true))" />
+                <set-variable name="mcp-primitives-config-raw" value="{{mcp-primitives-config}}" />
                 <set-variable name="mcp-jsonrpc-method" value="@{
                     var body = (string)context.Variables["mcp-request-body"];
-                    if (string.IsNullOrEmpty(body)) return "";
+                    if (string.IsNullOrEmpty(body)) { return ""; }
                     try {
                         var json = Newtonsoft.Json.Linq.JObject.Parse(body);
                         return json["method"]?.ToString() ?? "";
@@ -59,7 +60,7 @@
                             try {
                                 var json = Newtonsoft.Json.Linq.JObject.Parse(body);
                                 var p = json["params"];
-                                if (p == null) return "";
+                                if (p == null) { return ""; }
                                 return method == "resources/read"
                                     ? (p["uri"]?.ToString() ?? "")
                                     : (p["name"]?.ToString() ?? "");
@@ -67,46 +68,46 @@
                         }" />
                         <set-variable name="mcp-primitive-type" value="@{
                             var m = (string)context.Variables["mcp-jsonrpc-method"];
-                            if (m == "tools/call") return "tools";
-                            if (m == "prompts/get") return "prompts";
+                            if (m == "tools/call") { return "tools"; }
+                            if (m == "prompts/get") { return "prompts"; }
                             return "resources";
                         }" />
                         <set-variable name="mcp-filter-blocked" value="@{
                             var primitiveType = (string)context.Variables["mcp-primitive-type"];
                             var name = (string)context.Variables["mcp-primitive-name"];
-                            if (string.IsNullOrEmpty(name)) return "false";
+                            if (string.IsNullOrEmpty(name)) { return "false"; }
 
-                            var serverName = context.Api.Id.Replace("-api", "");
-                            string configJson;
-                            try {
-                                configJson = "{{mcp-primitives-" + serverName + "}}";
-                            } catch {
-                                return "false";
-                            }
-                            if (string.IsNullOrEmpty(configJson) || configJson.StartsWith("{{")) return "false";
+                            var allConfigsJson = (string)context.Variables["mcp-primitives-config-raw"];
+                            if (string.IsNullOrEmpty(allConfigsJson) || allConfigsJson.StartsWith("{{")) { return "false"; }
 
                             try {
-                                var config = Newtonsoft.Json.Linq.JObject.Parse(configJson);
+                                var serverName = context.Api.Id.Replace("-api", "");
+                                var allConfigs = Newtonsoft.Json.Linq.JObject.Parse(allConfigsJson);
+                                var serverConfig = allConfigs[serverName];
+                                if (serverConfig == null) { return "false"; }
+                                var config = (Newtonsoft.Json.Linq.JObject)serverConfig;
                                 var filter = config[primitiveType];
-                                if (filter == null) return "false";
+                                if (filter == null) { return "false"; }
                                 var policy = filter["policy"]?.ToString() ?? "allowAll";
 
-                                if (policy == "denyAll") return "true";
-                                if (policy == "allowAll") return "false";
+                                if (policy == "denyAll") { return "true"; }
+                                if (policy == "allowAll") { return "false"; }
 
                                 if (policy == "denyList") {
                                     var denied = filter["denied"]?.ToObject<string[]>() ?? new string[0];
                                     foreach (var d in denied) {
-                                        if (d.EndsWith("*") ? name.StartsWith(d.TrimEnd('*')) : name == d)
+                                        if (d.EndsWith("*") ? name.StartsWith(d.TrimEnd('*')) : name == d) {
                                             return "true";
+                                        }
                                     }
                                     return "false";
                                 }
                                 if (policy == "allowList") {
                                     var allowed = filter["allowed"]?.ToObject<string[]>() ?? new string[0];
                                     foreach (var a in allowed) {
-                                        if (a.EndsWith("*") ? name.StartsWith(a.TrimEnd('*')) : name == a)
+                                        if (a.EndsWith("*") ? name.StartsWith(a.TrimEnd('*')) : name == a) {
                                             return "false";
+                                        }
                                     }
                                     return "true";
                                 }

@@ -28,19 +28,22 @@ param profiles array = []
 // ---------------------------------------------------------------------------
 var apiCenterName = '${baseName}-apic'
 
-resource apiCenter 'Microsoft.ApiCenter/services@2024-03-01' = {
+resource apiCenter 'Microsoft.ApiCenter/services@2024-06-01-preview' = {
   name: apiCenterName
   location: location
   tags: tags
   identity: {
     type: 'SystemAssigned'
   }
+  sku: {
+    name: 'Free'
+  }
 }
 
 // ---------------------------------------------------------------------------
 // Default workspace (auto-created, referenced as existing)
 // ---------------------------------------------------------------------------
-resource defaultWorkspace 'Microsoft.ApiCenter/services/workspaces@2024-03-01' = {
+resource defaultWorkspace 'Microsoft.ApiCenter/services/workspaces@2024-06-01-preview' = {
   parent: apiCenter
   name: 'default'
   properties: {
@@ -52,7 +55,7 @@ resource defaultWorkspace 'Microsoft.ApiCenter/services/workspaces@2024-03-01' =
 // ---------------------------------------------------------------------------
 // Environment: APIM Gateway
 // ---------------------------------------------------------------------------
-resource apimEnvironment 'Microsoft.ApiCenter/services/workspaces/environments@2024-03-01' = {
+resource apimEnvironment 'Microsoft.ApiCenter/services/workspaces/environments@2024-06-01-preview' = {
   parent: defaultWorkspace
   name: 'apim-gateway'
   properties: {
@@ -71,11 +74,11 @@ resource apimEnvironment 'Microsoft.ApiCenter/services/workspaces/environments@2
 // ---------------------------------------------------------------------------
 // Metadata schemas: profile tags + transport type
 // ---------------------------------------------------------------------------
-resource profileMetadataSchema 'Microsoft.ApiCenter/services/metadataSchemas@2024-03-01' = {
+resource profileMetadataSchema 'Microsoft.ApiCenter/services/metadataSchemas@2024-06-01-preview' = {
   parent: apiCenter
   name: 'mcp-profiles'
   properties: {
-    schema: '{"type":"string","title":"MCP Profiles","description":"Profiles that include this API","enum":["all-mcp-tools","developer","business-analyst","app-1","app-2"]}'
+    schema: '{"type":"string","title":"MCP Profiles","description":"Profiles that include this API"}'
     assignedTo: [
       {
         entity: 'api'
@@ -85,11 +88,11 @@ resource profileMetadataSchema 'Microsoft.ApiCenter/services/metadataSchemas@202
   }
 }
 
-resource transportMetadataSchema 'Microsoft.ApiCenter/services/metadataSchemas@2024-03-01' = {
+resource transportMetadataSchema 'Microsoft.ApiCenter/services/metadataSchemas@2024-06-01-preview' = {
   parent: apiCenter
   name: 'mcp-transport'
   properties: {
-    schema: '{"type":"string","title":"MCP Transport","description":"Transport protocol used by this MCP server","enum":["streamable-http","https","stdio-wrapped"]}'
+    schema: '{"type":"string","title":"MCP Transport","description":"Transport protocol used by this MCP server"}'
     assignedTo: [
       {
         entity: 'api'
@@ -102,7 +105,7 @@ resource transportMetadataSchema 'Microsoft.ApiCenter/services/metadataSchemas@2
 // ---------------------------------------------------------------------------
 // Metadata schema: MCP Registry profile
 // ---------------------------------------------------------------------------
-resource registryProfileMetadataSchema 'Microsoft.ApiCenter/services/metadataSchemas@2024-03-01' = {
+resource registryProfileMetadataSchema 'Microsoft.ApiCenter/services/metadataSchemas@2024-06-01-preview' = {
   parent: apiCenter
   name: 'mcp-registry-profile'
   properties: {
@@ -119,7 +122,7 @@ resource registryProfileMetadataSchema 'Microsoft.ApiCenter/services/metadataSch
 // ---------------------------------------------------------------------------
 // Register each MCP server as an API
 // ---------------------------------------------------------------------------
-resource apiCenterApis 'Microsoft.ApiCenter/services/workspaces/apis@2024-03-01' = [
+resource apiCenterApis 'Microsoft.ApiCenter/services/workspaces/apis@2024-06-01-preview' = [
   for server in mcpServers: {
     parent: defaultWorkspace
     name: server.name
@@ -127,7 +130,6 @@ resource apiCenterApis 'Microsoft.ApiCenter/services/workspaces/apis@2024-03-01'
       title: server.displayName
       description: server.description
       kind: server.type == 'azure-openai' ? 'rest' : 'rest'
-      lifecycleStage: 'production'
       externalDocumentation: [
         {
           title: 'Gateway Endpoint'
@@ -144,32 +146,13 @@ resource apiCenterApis 'Microsoft.ApiCenter/services/workspaces/apis@2024-03-01'
 // ---------------------------------------------------------------------------
 // API versions (v1 for each MCP server)
 // ---------------------------------------------------------------------------
-resource apiVersions 'Microsoft.ApiCenter/services/workspaces/apis/versions@2024-03-01' = [
+resource apiVersions 'Microsoft.ApiCenter/services/workspaces/apis/versions@2024-06-01-preview' = [
   for (server, i) in mcpServers: {
     parent: apiCenterApis[i]
-    name: 'v1'
+    name: 'v1-0'
     properties: {
-      title: 'v1'
-    }
-  }
-]
-
-// ---------------------------------------------------------------------------
-// API deployments (link to APIM environment)
-// ---------------------------------------------------------------------------
-resource apiDeployments 'Microsoft.ApiCenter/services/workspaces/apis/deployments@2024-03-01' = [
-  for (server, i) in mcpServers: {
-    parent: apiCenterApis[i]
-    name: '${server.name}-apim'
-    properties: {
-      title: 'APIM Gateway'
-      description: 'Deployed via Azure API Management AI Gateway.'
-      environmentId: apimEnvironment.id
-      server: {
-        runtimeUri: [
-          '${apimGatewayUrl}/${server.basePath}'
-        ]
-      }
+      title: 'v1.0'
+      lifecycleStage: 'production'
     }
   }
 ]

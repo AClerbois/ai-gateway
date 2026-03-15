@@ -4,7 +4,6 @@
 -->
 <policies>
     <inbound>
-        <base />
         <!-- CORS for local development (VS Code / MCP clients) -->
         <cors allow-credentials="true">
             <allowed-origins>
@@ -43,13 +42,11 @@
         </trace>
     </inbound>
     <backend>
-        <base />
+        <forward-request />
     </backend>
     <outbound>
-        <base />
     </outbound>
     <on-error>
-        <base />
         <trace source="global-policy" severity="error">
             <message>@($"Error: {context.LastError.Message} | Reason: {context.LastError.Reason} | API: {context.Api.Name}")</message>
         </trace>

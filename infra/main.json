@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.41.2.15936",
-      "templateHash": "9079581314305696759"
+      "templateHash": "1018233037640220431"
     }
   },
   "parameters": {
@@ -30,7 +30,7 @@
     },
     "baseName": {
       "type": "string",
-      "defaultValue": "[format('apim-mcp-{0}', parameters('environment'))]",
+      "defaultValue": "[format('apim-mcp-{0}-{1}', parameters('environment'), uniqueString(resourceGroup().id))]",
       "metadata": {
         "description": "Base name prefix for all resources."
       }
@@ -620,9 +620,9 @@
     },
     "mcpConfig": "[variables('$fxv#0')]",
     "mcpServers": "[variables('mcpConfig').mcpServers]",
-    "globalPolicyXml": "<!--\r\n  Global APIM Policy\r\n  Applied to all APIs. Handles CORS, request metrics, and tracing.\r\n-->\r\n<policies>\r\n    <inbound>\r\n        <base />\r\n        <!-- CORS for local development (VS Code / MCP clients) -->\r\n        <cors allow-credentials=\"true\">\r\n            <allowed-origins>\r\n                <origin>http://localhost:3000</origin>\r\n                <origin>https://portal.azure.com</origin>\r\n                <origin>https://vscode.dev</origin>\r\n            </allowed-origins>\r\n            <allowed-methods preflight-result-max-age=\"300\">\r\n                <method>GET</method>\r\n                <method>POST</method>\r\n                <method>DELETE</method>\r\n                <method>OPTIONS</method>\r\n            </allowed-methods>\r\n            <allowed-headers>\r\n                <header>Content-Type</header>\r\n                <header>Authorization</header>\r\n                <header>Ocp-Apim-Subscription-Key</header>\r\n                <header>Mcp-Session-Id</header>\r\n                <header>Accept</header>\r\n            </allowed-headers>\r\n            <expose-headers>\r\n                <header>Mcp-Session-Id</header>\r\n                <header>Content-Type</header>\r\n            </expose-headers>\r\n        </cors>\r\n        <!-- Emit custom metric for request counting -->\r\n        <emit-metric name=\"mcp-gateway-requests\" value=\"1\" namespace=\"apim-mcp-gateway\">\r\n            <dimension name=\"API ID\" value=\"@(context.Api.Id)\" />\r\n            <dimension name=\"Subscription ID\" value=\"@(context.Subscription.Id)\" />\r\n            <dimension name=\"Client IP\" value=\"@(context.Request.IpAddress)\" />\r\n            <dimension name=\"Operation\" value=\"@(context.Operation.Id)\" />\r\n        </emit-metric>\r\n        <!-- Tracing for diagnostics -->\r\n        <trace source=\"global-policy\" severity=\"information\">\r\n            <message>@($\"Request: {context.Request.Method} {context.Request.Url.Path} | API: {context.Api.Name} | Subscription: {context.Subscription.Name}\")</message>\r\n        </trace>\r\n    </inbound>\r\n    <backend>\r\n        <base />\r\n    </backend>\r\n    <outbound>\r\n        <base />\r\n    </outbound>\r\n    <on-error>\r\n        <base />\r\n        <trace source=\"global-policy\" severity=\"error\">\r\n            <message>@($\"Error: {context.LastError.Message} | Reason: {context.LastError.Reason} | API: {context.Api.Name}\")</message>\r\n        </trace>\r\n    </on-error>\r\n</policies>\r\n",
-    "mcpPolicyXml": "<!--\r\n  MCP Passthrough Policy\r\n  Applied to MCP server APIs. Handles rate limiting, optional Entra ID\r\n  validation, MCP primitives filtering, and MCP protocol transparency\r\n  (Streamable HTTP / JSON-RPC 2.0).\r\n-->\r\n<policies>\r\n    <inbound>\r\n        <base />\r\n        <!--\r\n          Optional: Entra ID (Azure AD) token validation.\r\n          Uncomment the block below when OAuth 2.1 authentication is required.\r\n          Configure named values: entra-tenant-id, entra-client-app-ids.\r\n        -->\r\n        <!--\r\n        <validate-azure-ad-token tenant-id=\"{{entra-tenant-id}}\" output-token-variable-name=\"jwt-token\">\r\n            <client-application-ids>\r\n                <application-id>{{entra-client-app-ids}}</application-id>\r\n            </client-application-ids>\r\n        </validate-azure-ad-token>\r\n        -->\r\n        <!-- Rate limit per MCP session to prevent abuse -->\r\n        <rate-limit-by-key\r\n            calls=\"60\"\r\n            renewal-period=\"60\"\r\n            counter-key=\"@(context.Request.Headers.GetValueOrDefault(\"Mcp-Session-Id\", context.Request.IpAddress))\"\r\n            increment-condition=\"@(context.Response.StatusCode >= 200 && context.Response.StatusCode < 400)\" />\r\n        <!-- Trace MCP-specific request details -->\r\n        <trace source=\"mcp-passthrough\" severity=\"information\">\r\n            <message>@{\r\n                var sessionId = context.Request.Headers.GetValueOrDefault(\"Mcp-Session-Id\", \"no-session\");\r\n                return $\"MCP Request | Session: {sessionId} | Method: {context.Request.Method} | Path: {context.Request.Url.Path}\";\r\n            }</message>\r\n        </trace>\r\n        <!--\r\n          MCP Primitives Filtering (tools, prompts, resources).\r\n          Reads per-server filter config from Named Value: mcp-primitives-<serverName>.\r\n          If no Named Value exists, all primitives are allowed (passthrough).\r\n        -->\r\n        <choose>\r\n            <when condition=\"@(context.Request.Method == \"POST\")\">\r\n                <set-variable name=\"mcp-request-body\" value=\"@(context.Request.Body.As<string>(preserveContent: true))\" />\r\n                <set-variable name=\"mcp-jsonrpc-method\" value=\"@{\r\n                    var body = (string)context.Variables[\"mcp-request-body\"];\r\n                    if (string.IsNullOrEmpty(body)) return \"\";\r\n                    try {\r\n                        var json = Newtonsoft.Json.Linq.JObject.Parse(body);\r\n                        return json[\"method\"]?.ToString() ?? \"\";\r\n                    } catch { return \"\"; }\r\n                }\" />\r\n                <choose>\r\n                    <when condition=\"@{\r\n                        var m = (string)context.Variables[\"mcp-jsonrpc-method\"];\r\n                        return m == \"tools/call\" || m == \"prompts/get\" || m == \"resources/read\";\r\n                    }\">\r\n                        <set-variable name=\"mcp-primitive-name\" value=\"@{\r\n                            var body = (string)context.Variables[\"mcp-request-body\"];\r\n                            var method = (string)context.Variables[\"mcp-jsonrpc-method\"];\r\n                            try {\r\n                                var json = Newtonsoft.Json.Linq.JObject.Parse(body);\r\n                                var p = json[\"params\"];\r\n                                if (p == null) return \"\";\r\n                                return method == \"resources/read\"\r\n                                    ? (p[\"uri\"]?.ToString() ?? \"\")\r\n                                    : (p[\"name\"]?.ToString() ?? \"\");\r\n                            } catch { return \"\"; }\r\n                        }\" />\r\n                        <set-variable name=\"mcp-primitive-type\" value=\"@{\r\n                            var m = (string)context.Variables[\"mcp-jsonrpc-method\"];\r\n                            if (m == \"tools/call\") return \"tools\";\r\n                            if (m == \"prompts/get\") return \"prompts\";\r\n                            return \"resources\";\r\n                        }\" />\r\n                        <set-variable name=\"mcp-filter-blocked\" value=\"@{\r\n                            var primitiveType = (string)context.Variables[\"mcp-primitive-type\"];\r\n                            var name = (string)context.Variables[\"mcp-primitive-name\"];\r\n                            if (string.IsNullOrEmpty(name)) return \"false\";\r\n\r\n                            var serverName = context.Api.Id.Replace(\"-api\", \"\");\r\n                            string configJson;\r\n                            try {\r\n                                configJson = \"{{mcp-primitives-\" + serverName + \"}}\";\r\n                            } catch {\r\n                                return \"false\";\r\n                            }\r\n                            if (string.IsNullOrEmpty(configJson) || configJson.StartsWith(\"{{\")) return \"false\";\r\n\r\n                            try {\r\n                                var config = Newtonsoft.Json.Linq.JObject.Parse(configJson);\r\n                                var filter = config[primitiveType];\r\n                                if (filter == null) return \"false\";\r\n                                var policy = filter[\"policy\"]?.ToString() ?? \"allowAll\";\r\n\r\n                                if (policy == \"denyAll\") return \"true\";\r\n                                if (policy == \"allowAll\") return \"false\";\r\n\r\n                                if (policy == \"denyList\") {\r\n                                    var denied = filter[\"denied\"]?.ToObject<string[]>() ?? new string[0];\r\n                                    foreach (var d in denied) {\r\n                                        if (d.EndsWith(\"*\") ? name.StartsWith(d.TrimEnd('*')) : name == d)\r\n                                            return \"true\";\r\n                                    }\r\n                                    return \"false\";\r\n                                }\r\n                                if (policy == \"allowList\") {\r\n                                    var allowed = filter[\"allowed\"]?.ToObject<string[]>() ?? new string[0];\r\n                                    foreach (var a in allowed) {\r\n                                        if (a.EndsWith(\"*\") ? name.StartsWith(a.TrimEnd('*')) : name == a)\r\n                                            return \"false\";\r\n                                    }\r\n                                    return \"true\";\r\n                                }\r\n                                return \"false\";\r\n                            } catch { return \"false\"; }\r\n                        }\" />\r\n                        <choose>\r\n                            <when condition=\"@((string)context.Variables[\"mcp-filter-blocked\"] == \"true\")\">\r\n                                <return-response>\r\n                                    <set-status code=\"403\" reason=\"Forbidden\" />\r\n                                    <set-header name=\"Content-Type\" exists-action=\"override\">\r\n                                        <value>application/json</value>\r\n                                    </set-header>\r\n                                    <set-body>@{\r\n                                        var body = (string)context.Variables[\"mcp-request-body\"];\r\n                                        var id = \"null\";\r\n                                        try { id = Newtonsoft.Json.Linq.JObject.Parse(body)[\"id\"]?.ToString() ?? \"null\"; } catch {}\r\n                                        var pType = (string)context.Variables[\"mcp-primitive-type\"];\r\n                                        var pName = (string)context.Variables[\"mcp-primitive-name\"];\r\n                                        return $\"{{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"id\\\":{id},\\\"error\\\":{{\\\"code\\\":-32600,\\\"message\\\":\\\"Blocked by governance policy: {pType}/{pName} is not allowed on this gateway.\\\"}}}}\";\r\n                                    }</set-body>\r\n                                </return-response>\r\n                            </when>\r\n                        </choose>\r\n                    </when>\r\n                </choose>\r\n            </when>\r\n        </choose>\r\n        <!-- Set backend to the configured MCP server -->\r\n        <set-backend-service backend-id=\"@(context.Api.Id.Replace(\"-api\", \"-backend\"))\" />\r\n    </inbound>\r\n    <backend>\r\n        <base />\r\n    </backend>\r\n    <outbound>\r\n        <base />\r\n        <!-- Ensure MCP Session ID is forwarded in response -->\r\n        <set-header name=\"Mcp-Session-Id\" exists-action=\"skip\">\r\n            <value>@(context.Request.Headers.GetValueOrDefault(\"Mcp-Session-Id\", \"\"))</value>\r\n        </set-header>\r\n    </outbound>\r\n    <on-error>\r\n        <base />\r\n    </on-error>\r\n</policies>\r\n",
-    "aoaiPolicyXml": "<!--\r\n  Azure OpenAI Policy\r\n  Applied to Azure OpenAI APIs exposed through the AI Gateway.\r\n  Provides token-based rate limiting, token usage metrics, and\r\n  managed identity authentication to the backend.\r\n-->\r\n<policies>\r\n    <inbound>\r\n        <base />\r\n        <!--\r\n          Optional: Entra ID (Azure AD) token validation for client-side auth.\r\n          Uncomment when OAuth 2.1 authentication is required for callers.\r\n        -->\r\n        <!--\r\n        <validate-azure-ad-token tenant-id=\"{{entra-tenant-id}}\" output-token-variable-name=\"jwt-token\">\r\n            <client-application-ids>\r\n                <application-id>{{entra-client-app-ids}}</application-id>\r\n            </client-application-ids>\r\n        </validate-azure-ad-token>\r\n        -->\r\n        <!-- Token-based rate limiting (tokens per minute) -->\r\n        <llm-token-limit\r\n            tokens-per-minute=\"10000\"\r\n            counter-key=\"@(context.Subscription.Id)\"\r\n            estimate-prompt-tokens=\"true\"\r\n            tokens-consumed-header-name=\"x-]tokens-consumed\"\r\n            remaining-tokens-header-name=\"x-tokens-remaining\" />\r\n        <!-- Authenticate to Azure OpenAI backend using managed identity -->\r\n        <authentication-managed-identity resource=\"https://cognitiveservices.azure.com\" />\r\n        <!-- Trace Azure OpenAI request details -->\r\n        <trace source=\"aoai-policy\" severity=\"information\">\r\n            <message>@($\"Azure OpenAI Request | Subscription: {context.Subscription.Name} | Deployment: {context.Request.MatchedParameters[\"deployment-id\"]}\")</message>\r\n        </trace>\r\n    </inbound>\r\n    <backend>\r\n        <base />\r\n    </backend>\r\n    <outbound>\r\n        <base />\r\n        <!-- Emit token usage metrics from the response -->\r\n        <llm-emit-token-metric namespace=\"apim-mcp-gateway\">\r\n            <dimension name=\"API ID\" value=\"@(context.Api.Id)\" />\r\n            <dimension name=\"Subscription ID\" value=\"@(context.Subscription.Id)\" />\r\n            <dimension name=\"Client IP\" value=\"@(context.Request.IpAddress)\" />\r\n            <dimension name=\"Model\" value=\"@(context.Request.MatchedParameters.GetValueOrDefault(\"deployment-id\", \"unknown\"))\" />\r\n        </llm-emit-token-metric>\r\n    </outbound>\r\n    <on-error>\r\n        <base />\r\n    </on-error>\r\n</policies>\r\n",
+    "globalPolicyXml": "<!--\r\n  Global APIM Policy\r\n  Applied to all APIs. Handles CORS, request metrics, and tracing.\r\n-->\r\n<policies>\r\n    <inbound>\r\n        <!-- CORS for local development (VS Code / MCP clients) -->\r\n        <cors allow-credentials=\"true\">\r\n            <allowed-origins>\r\n                <origin>http://localhost:3000</origin>\r\n                <origin>https://portal.azure.com</origin>\r\n                <origin>https://vscode.dev</origin>\r\n            </allowed-origins>\r\n            <allowed-methods preflight-result-max-age=\"300\">\r\n                <method>GET</method>\r\n                <method>POST</method>\r\n                <method>DELETE</method>\r\n                <method>OPTIONS</method>\r\n            </allowed-methods>\r\n            <allowed-headers>\r\n                <header>Content-Type</header>\r\n                <header>Authorization</header>\r\n                <header>Ocp-Apim-Subscription-Key</header>\r\n                <header>Mcp-Session-Id</header>\r\n                <header>Accept</header>\r\n            </allowed-headers>\r\n            <expose-headers>\r\n                <header>Mcp-Session-Id</header>\r\n                <header>Content-Type</header>\r\n            </expose-headers>\r\n        </cors>\r\n        <!-- Emit custom metric for request counting -->\r\n        <emit-metric name=\"mcp-gateway-requests\" value=\"1\" namespace=\"apim-mcp-gateway\">\r\n            <dimension name=\"API ID\" value=\"@(context.Api.Id)\" />\r\n            <dimension name=\"Subscription ID\" value=\"@(context.Subscription.Id)\" />\r\n            <dimension name=\"Client IP\" value=\"@(context.Request.IpAddress)\" />\r\n            <dimension name=\"Operation\" value=\"@(context.Operation.Id)\" />\r\n        </emit-metric>\r\n        <!-- Tracing for diagnostics -->\r\n        <trace source=\"global-policy\" severity=\"information\">\r\n            <message>@($\"Request: {context.Request.Method} {context.Request.Url.Path} | API: {context.Api.Name} | Subscription: {context.Subscription.Name}\")</message>\r\n        </trace>\r\n    </inbound>\r\n    <backend>\r\n        <forward-request />\r\n    </backend>\r\n    <outbound>\r\n    </outbound>\r\n    <on-error>\r\n        <trace source=\"global-policy\" severity=\"error\">\r\n            <message>@($\"Error: {context.LastError.Message} | Reason: {context.LastError.Reason} | API: {context.Api.Name}\")</message>\r\n        </trace>\r\n    </on-error>\r\n</policies>\r\n",
+    "mcpPolicyXml": "<!--\r\n  MCP Passthrough Policy\r\n  Applied to MCP server APIs. Handles rate limiting, optional Entra ID\r\n  validation, MCP primitives filtering, and MCP protocol transparency\r\n  (Streamable HTTP / JSON-RPC 2.0).\r\n-->\r\n<policies>\r\n    <inbound>\r\n        <base />\r\n        <!--\r\n          Optional: Entra ID (Azure AD) token validation.\r\n          Uncomment the block below when OAuth 2.1 authentication is required.\r\n          Configure named values: entra-tenant-id, entra-client-app-ids.\r\n        -->\r\n        <!--\r\n        <validate-azure-ad-token tenant-id=\"{{entra-tenant-id}}\" output-token-variable-name=\"jwt-token\">\r\n            <client-application-ids>\r\n                <application-id>{{entra-client-app-ids}}</application-id>\r\n            </client-application-ids>\r\n        </validate-azure-ad-token>\r\n        -->\r\n        <!-- Rate limit per MCP session to prevent abuse -->\r\n        <rate-limit-by-key\r\n            calls=\"60\"\r\n            renewal-period=\"60\"\r\n            counter-key=\"@(context.Request.Headers.GetValueOrDefault(\"Mcp-Session-Id\", context.Request.IpAddress))\"\r\n            increment-condition=\"@(context.Response.StatusCode >= 200 && context.Response.StatusCode < 400)\" />\r\n        <!-- Trace MCP-specific request details -->\r\n        <trace source=\"mcp-passthrough\" severity=\"information\">\r\n            <message>@{\r\n                var sessionId = context.Request.Headers.GetValueOrDefault(\"Mcp-Session-Id\", \"no-session\");\r\n                return $\"MCP Request | Session: {sessionId} | Method: {context.Request.Method} | Path: {context.Request.Url.Path}\";\r\n            }</message>\r\n        </trace>\r\n        <!--\r\n          MCP Primitives Filtering (tools, prompts, resources).\r\n          Reads per-server filter config from Named Value: mcp-primitives-<serverName>.\r\n          If no Named Value exists, all primitives are allowed (passthrough).\r\n        -->\r\n        <choose>\r\n            <when condition=\"@(context.Request.Method == \"POST\")\">\r\n                <set-variable name=\"mcp-request-body\" value=\"@(context.Request.Body.As<string>(preserveContent: true))\" />\r\n                <set-variable name=\"mcp-primitives-config-raw\" value=\"{{mcp-primitives-config}}\" />\r\n                <set-variable name=\"mcp-jsonrpc-method\" value=\"@{\r\n                    var body = (string)context.Variables[\"mcp-request-body\"];\r\n                    if (string.IsNullOrEmpty(body)) { return \"\"; }\r\n                    try {\r\n                        var json = Newtonsoft.Json.Linq.JObject.Parse(body);\r\n                        return json[\"method\"]?.ToString() ?? \"\";\r\n                    } catch { return \"\"; }\r\n                }\" />\r\n                <choose>\r\n                    <when condition=\"@{\r\n                        var m = (string)context.Variables[\"mcp-jsonrpc-method\"];\r\n                        return m == \"tools/call\" || m == \"prompts/get\" || m == \"resources/read\";\r\n                    }\">\r\n                        <set-variable name=\"mcp-primitive-name\" value=\"@{\r\n                            var body = (string)context.Variables[\"mcp-request-body\"];\r\n                            var method = (string)context.Variables[\"mcp-jsonrpc-method\"];\r\n                            try {\r\n                                var json = Newtonsoft.Json.Linq.JObject.Parse(body);\r\n                                var p = json[\"params\"];\r\n                                if (p == null) { return \"\"; }\r\n                                return method == \"resources/read\"\r\n                                    ? (p[\"uri\"]?.ToString() ?? \"\")\r\n                                    : (p[\"name\"]?.ToString() ?? \"\");\r\n                            } catch { return \"\"; }\r\n                        }\" />\r\n                        <set-variable name=\"mcp-primitive-type\" value=\"@{\r\n                            var m = (string)context.Variables[\"mcp-jsonrpc-method\"];\r\n                            if (m == \"tools/call\") { return \"tools\"; }\r\n                            if (m == \"prompts/get\") { return \"prompts\"; }\r\n                            return \"resources\";\r\n                        }\" />\r\n                        <set-variable name=\"mcp-filter-blocked\" value=\"@{\r\n                            var primitiveType = (string)context.Variables[\"mcp-primitive-type\"];\r\n                            var name = (string)context.Variables[\"mcp-primitive-name\"];\r\n                            if (string.IsNullOrEmpty(name)) { return \"false\"; }\r\n\r\n                            var allConfigsJson = (string)context.Variables[\"mcp-primitives-config-raw\"];\r\n                            if (string.IsNullOrEmpty(allConfigsJson) || allConfigsJson.StartsWith(\"{{\")) { return \"false\"; }\r\n\r\n                            try {\r\n                                var serverName = context.Api.Id.Replace(\"-api\", \"\");\r\n                                var allConfigs = Newtonsoft.Json.Linq.JObject.Parse(allConfigsJson);\r\n                                var serverConfig = allConfigs[serverName];\r\n                                if (serverConfig == null) { return \"false\"; }\r\n                                var config = (Newtonsoft.Json.Linq.JObject)serverConfig;\r\n                                var filter = config[primitiveType];\r\n                                if (filter == null) { return \"false\"; }\r\n                                var policy = filter[\"policy\"]?.ToString() ?? \"allowAll\";\r\n\r\n                                if (policy == \"denyAll\") { return \"true\"; }\r\n                                if (policy == \"allowAll\") { return \"false\"; }\r\n\r\n                                if (policy == \"denyList\") {\r\n                                    var denied = filter[\"denied\"]?.ToObject<string[]>() ?? new string[0];\r\n                                    foreach (var d in denied) {\r\n                                        if (d.EndsWith(\"*\") ? name.StartsWith(d.TrimEnd('*')) : name == d) {\r\n                                            return \"true\";\r\n                                        }\r\n                                    }\r\n                                    return \"false\";\r\n                                }\r\n                                if (policy == \"allowList\") {\r\n                                    var allowed = filter[\"allowed\"]?.ToObject<string[]>() ?? new string[0];\r\n                                    foreach (var a in allowed) {\r\n                                        if (a.EndsWith(\"*\") ? name.StartsWith(a.TrimEnd('*')) : name == a) {\r\n                                            return \"false\";\r\n                                        }\r\n                                    }\r\n                                    return \"true\";\r\n                                }\r\n                                return \"false\";\r\n                            } catch { return \"false\"; }\r\n                        }\" />\r\n                        <choose>\r\n                            <when condition=\"@((string)context.Variables[\"mcp-filter-blocked\"] == \"true\")\">\r\n                                <return-response>\r\n                                    <set-status code=\"403\" reason=\"Forbidden\" />\r\n                                    <set-header name=\"Content-Type\" exists-action=\"override\">\r\n                                        <value>application/json</value>\r\n                                    </set-header>\r\n                                    <set-body>@{\r\n                                        var body = (string)context.Variables[\"mcp-request-body\"];\r\n                                        var id = \"null\";\r\n                                        try { id = Newtonsoft.Json.Linq.JObject.Parse(body)[\"id\"]?.ToString() ?? \"null\"; } catch {}\r\n                                        var pType = (string)context.Variables[\"mcp-primitive-type\"];\r\n                                        var pName = (string)context.Variables[\"mcp-primitive-name\"];\r\n                                        return $\"{{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"id\\\":{id},\\\"error\\\":{{\\\"code\\\":-32600,\\\"message\\\":\\\"Blocked by governance policy: {pType}/{pName} is not allowed on this gateway.\\\"}}}}\";\r\n                                    }</set-body>\r\n                                </return-response>\r\n                            </when>\r\n                        </choose>\r\n                    </when>\r\n                </choose>\r\n            </when>\r\n        </choose>\r\n        <!-- Set backend to the configured MCP server -->\r\n        <set-backend-service backend-id=\"@(context.Api.Id.Replace(\"-api\", \"-backend\"))\" />\r\n    </inbound>\r\n    <backend>\r\n        <base />\r\n    </backend>\r\n    <outbound>\r\n        <base />\r\n        <!-- Ensure MCP Session ID is forwarded in response -->\r\n        <set-header name=\"Mcp-Session-Id\" exists-action=\"skip\">\r\n            <value>@(context.Request.Headers.GetValueOrDefault(\"Mcp-Session-Id\", \"\"))</value>\r\n        </set-header>\r\n    </outbound>\r\n    <on-error>\r\n        <base />\r\n    </on-error>\r\n</policies>\r\n",
+    "aoaiPolicyXml": "<!--\r\n  Azure OpenAI Policy\r\n  Applied to Azure OpenAI APIs exposed through the AI Gateway.\r\n  Provides token-based rate limiting, token usage metrics, and\r\n  managed identity authentication to the backend.\r\n-->\r\n<policies>\r\n    <inbound>\r\n        <base />\r\n        <!--\r\n          Optional: Entra ID (Azure AD) token validation for client-side auth.\r\n          Uncomment when OAuth 2.1 authentication is required for callers.\r\n        -->\r\n        <!--\r\n        <validate-azure-ad-token tenant-id=\"{{entra-tenant-id}}\" output-token-variable-name=\"jwt-token\">\r\n            <client-application-ids>\r\n                <application-id>{{entra-client-app-ids}}</application-id>\r\n            </client-application-ids>\r\n        </validate-azure-ad-token>\r\n        -->\r\n        <!-- Token-based rate limiting (tokens per minute) -->\r\n        <llm-token-limit\r\n            tokens-per-minute=\"10000\"\r\n            counter-key=\"@(context.Subscription.Id)\"\r\n            estimate-prompt-tokens=\"true\"\r\n            tokens-consumed-header-name=\"x-tokens-consumed\"\r\n            remaining-tokens-header-name=\"x-tokens-remaining\" />\r\n        <!-- Authenticate to Azure OpenAI backend using managed identity -->\r\n        <authentication-managed-identity resource=\"https://cognitiveservices.azure.com\" />\r\n        <!-- Trace Azure OpenAI request details -->\r\n        <trace source=\"aoai-policy\" severity=\"information\">\r\n            <message>@($\"Azure OpenAI Request | Subscription: {context.Subscription.Name} | Deployment: {context.Request.MatchedParameters[\"deployment-id\"]}\")</message>\r\n        </trace>\r\n    </inbound>\r\n    <backend>\r\n        <base />\r\n    </backend>\r\n    <outbound>\r\n        <base />\r\n        <!-- Emit token usage metrics from the response -->\r\n        <emit-metric name=\"aoai-token-usage\" value=\"1\" namespace=\"apim-mcp-gateway\">\r\n            <dimension name=\"API ID\" value=\"@(context.Api.Id)\" />\r\n            <dimension name=\"Subscription ID\" value=\"@(context.Subscription.Id)\" />\r\n            <dimension name=\"Client IP\" value=\"@(context.Request.IpAddress)\" />\r\n            <dimension name=\"Model\" value=\"@(context.Request.MatchedParameters.GetValueOrDefault(\"deployment-id\", \"unknown\"))\" />\r\n        </emit-metric>\r\n    </outbound>\r\n    <on-error>\r\n        <base />\r\n    </on-error>\r\n</policies>\r\n",
     "wrappedConfig": "[variables('$fxv#1')]",
     "wrappedMcpServers": "[variables('wrappedConfig').wrappedMcpServers]",
     "profilesConfig": "[variables('$fxv#2')]",
@@ -1301,7 +1301,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "16871111947824923011"
+              "templateHash": "1437526597145195895"
             }
           },
           "parameters": {
@@ -1333,6 +1333,10 @@
               }
             }
           },
+          "variables": {
+            "serversWithPrimitives": "[filter(parameters('approvedServers'), lambda('s', contains(lambdaVariables('s'), 'mcpPrimitives')))]",
+            "primitivesConfigMap": "[toObject(variables('serversWithPrimitives'), lambda('s', lambdaVariables('s').name), lambda('s', lambdaVariables('s').mcpPrimitives))]"
+          },
           "resources": [
             {
               "condition": "[not(empty(parameters('entraIdTenantId')))]",
@@ -1357,77 +1361,16 @@
               }
             },
             {
-              "copy": {
-                "name": "mcpPrimitivesNamedValues",
-                "count": "[length(parameters('approvedServers'))]"
-              },
-              "condition": "[contains(parameters('approvedServers')[copyIndex()], 'mcpPrimitives')]",
-              "type": "Microsoft.Resources/deployments",
-              "apiVersion": "2025-04-01",
-              "name": "[format('nv-primitives-{0}', parameters('approvedServers')[copyIndex()].name)]",
+              "type": "Microsoft.ApiManagement/service/namedValues",
+              "apiVersion": "2024-06-01-preview",
+              "name": "[format('{0}/{1}', parameters('apimName'), 'mcp-primitives-config')]",
               "properties": {
-                "expressionEvaluationOptions": {
-                  "scope": "inner"
-                },
-                "mode": "Incremental",
-                "parameters": {
-                  "apimName": {
-                    "value": "[parameters('apimName')]"
-                  },
-                  "serverName": {
-                    "value": "[parameters('approvedServers')[copyIndex()].name]"
-                  },
-                  "mcpPrimitivesJson": {
-                    "value": "[string(parameters('approvedServers')[copyIndex()].mcpPrimitives)]"
-                  }
-                },
-                "template": {
-                  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
-                  "contentVersion": "1.0.0.0",
-                  "metadata": {
-                    "_generator": {
-                      "name": "bicep",
-                      "version": "0.41.2.15936",
-                      "templateHash": "14853301329148444339"
-                    }
-                  },
-                  "parameters": {
-                    "apimName": {
-                      "type": "string",
-                      "metadata": {
-                        "description": "Name of the existing APIM instance."
-                      }
-                    },
-                    "serverName": {
-                      "type": "string",
-                      "metadata": {
-                        "description": "MCP server name (used as Named Value key)."
-                      }
-                    },
-                    "mcpPrimitivesJson": {
-                      "type": "string",
-                      "metadata": {
-                        "description": "JSON string of the mcpPrimitives filter configuration."
-                      }
-                    }
-                  },
-                  "resources": [
-                    {
-                      "type": "Microsoft.ApiManagement/service/namedValues",
-                      "apiVersion": "2024-06-01-preview",
-                      "name": "[format('{0}/{1}', parameters('apimName'), format('mcp-primitives-{0}', parameters('serverName')))]",
-                      "properties": {
-                        "displayName": "[format('mcp-primitives-{0}', parameters('serverName'))]",
-                        "value": "[parameters('mcpPrimitivesJson')]",
-                        "secret": false,
-                        "tags": [
-                          "mcp-primitives",
-                          "[parameters('serverName')]"
-                        ]
-                      }
-                    }
-                  ]
-                }
+                "displayName": "mcp-primitives-config",
+                "value": "[string(variables('primitivesConfigMap'))]",
+                "secret": false,
+                "tags": [
+                  "mcp-primitives"
+                ]
               }
             }
           ]
@@ -1635,7 +1578,8 @@
         }
       },
       "dependsOn": [
-        "[resourceId('Microsoft.Resources/deployments', 'apim')]"
+        "[resourceId('Microsoft.Resources/deployments', 'apim')]",
+        "[resourceId('Microsoft.Resources/deployments', 'apim-apis')]"
       ]
     },
     {
@@ -2002,7 +1946,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "8289146749248651999"
+              "templateHash": "7805967852660074145"
             }
           },
           "parameters": {
@@ -2051,17 +1995,20 @@
           "resources": [
             {
               "type": "Microsoft.ApiCenter/services",
-              "apiVersion": "2024-03-01",
+              "apiVersion": "2024-06-01-preview",
               "name": "[variables('apiCenterName')]",
               "location": "[parameters('location')]",
               "tags": "[parameters('tags')]",
               "identity": {
                 "type": "SystemAssigned"
+              },
+              "sku": {
+                "name": "Free"
               }
             },
             {
               "type": "Microsoft.ApiCenter/services/workspaces",
-              "apiVersion": "2024-03-01",
+              "apiVersion": "2024-06-01-preview",
               "name": "[format('{0}/{1}', variables('apiCenterName'), 'default')]",
               "properties": {
                 "title": "Default",
@@ -2073,7 +2020,7 @@
             },
             {
               "type": "Microsoft.ApiCenter/services/workspaces/environments",
-              "apiVersion": "2024-03-01",
+              "apiVersion": "2024-06-01-preview",
               "name": "[format('{0}/{1}/{2}', variables('apiCenterName'), 'default', 'apim-gateway')]",
               "properties": {
                 "title": "APIM AI Gateway",
@@ -2092,10 +2039,10 @@
             },
             {
               "type": "Microsoft.ApiCenter/services/metadataSchemas",
-              "apiVersion": "2024-03-01",
+              "apiVersion": "2024-06-01-preview",
               "name": "[format('{0}/{1}', variables('apiCenterName'), 'mcp-profiles')]",
               "properties": {
-                "schema": "{\"type\":\"string\",\"title\":\"MCP Profiles\",\"description\":\"Profiles that include this API\",\"enum\":[\"all-mcp-tools\",\"developer\",\"business-analyst\",\"app-1\",\"app-2\"]}",
+                "schema": "{\"type\":\"string\",\"title\":\"MCP Profiles\",\"description\":\"Profiles that include this API\"}",
                 "assignedTo": [
                   {
                     "entity": "api",
@@ -2109,10 +2056,10 @@
             },
             {
               "type": "Microsoft.ApiCenter/services/metadataSchemas",
-              "apiVersion": "2024-03-01",
+              "apiVersion": "2024-06-01-preview",
               "name": "[format('{0}/{1}', variables('apiCenterName'), 'mcp-transport')]",
               "properties": {
-                "schema": "{\"type\":\"string\",\"title\":\"MCP Transport\",\"description\":\"Transport protocol used by this MCP server\",\"enum\":[\"streamable-http\",\"https\",\"stdio-wrapped\"]}",
+                "schema": "{\"type\":\"string\",\"title\":\"MCP Transport\",\"description\":\"Transport protocol used by this MCP server\"}",
                 "assignedTo": [
                   {
                     "entity": "api",
@@ -2126,7 +2073,7 @@
             },
             {
               "type": "Microsoft.ApiCenter/services/metadataSchemas",
-              "apiVersion": "2024-03-01",
+              "apiVersion": "2024-06-01-preview",
               "name": "[format('{0}/{1}', variables('apiCenterName'), 'mcp-registry-profile')]",
               "properties": {
                 "schema": "{\"type\":\"string\",\"title\":\"MCP Registry Profile\",\"description\":\"Profile used as registry name for GitHub MCP Allowlist integration\"}",
@@ -2147,13 +2094,12 @@
                 "count": "[length(parameters('mcpServers'))]"
               },
               "type": "Microsoft.ApiCenter/services/workspaces/apis",
-              "apiVersion": "2024-03-01",
+              "apiVersion": "2024-06-01-preview",
               "name": "[format('{0}/{1}/{2}', variables('apiCenterName'), 'default', parameters('mcpServers')[copyIndex()].name)]",
               "properties": {
                 "title": "[parameters('mcpServers')[copyIndex()].displayName]",
                 "description": "[parameters('mcpServers')[copyIndex()].description]",
                 "kind": "[if(equals(parameters('mcpServers')[copyIndex()].type, 'azure-openai'), 'rest', 'rest')]",
-                "lifecycleStage": "production",
                 "externalDocumentation": [
                   {
                     "title": "Gateway Endpoint",
@@ -2174,36 +2120,14 @@
                 "count": "[length(parameters('mcpServers'))]"
               },
               "type": "Microsoft.ApiCenter/services/workspaces/apis/versions",
-              "apiVersion": "2024-03-01",
-              "name": "[format('{0}/{1}/{2}/{3}', variables('apiCenterName'), 'default', parameters('mcpServers')[copyIndex()].name, 'v1')]",
+              "apiVersion": "2024-06-01-preview",
+              "name": "[format('{0}/{1}/{2}/{3}', variables('apiCenterName'), 'default', parameters('mcpServers')[copyIndex()].name, 'v1-0')]",
               "properties": {
-                "title": "v1"
+                "title": "v1.0",
+                "lifecycleStage": "production"
               },
               "dependsOn": [
                 "[resourceId('Microsoft.ApiCenter/services/workspaces/apis', variables('apiCenterName'), 'default', parameters('mcpServers')[copyIndex()].name)]"
-              ]
-            },
-            {
-              "copy": {
-                "name": "apiDeployments",
-                "count": "[length(parameters('mcpServers'))]"
-              },
-              "type": "Microsoft.ApiCenter/services/workspaces/apis/deployments",
-              "apiVersion": "2024-03-01",
-              "name": "[format('{0}/{1}/{2}/{3}', variables('apiCenterName'), 'default', parameters('mcpServers')[copyIndex()].name, format('{0}-apim', parameters('mcpServers')[copyIndex()].name))]",
-              "properties": {
-                "title": "APIM Gateway",
-                "description": "Deployed via Azure API Management AI Gateway.",
-                "environmentId": "[resourceId('Microsoft.ApiCenter/services/workspaces/environments', variables('apiCenterName'), 'default', 'apim-gateway')]",
-                "server": {
-                  "runtimeUri": [
-                    "[format('{0}/{1}', parameters('apimGatewayUrl'), parameters('mcpServers')[copyIndex()].basePath)]"
-                  ]
-                }
-              },
-              "dependsOn": [
-                "[resourceId('Microsoft.ApiCenter/services/workspaces/apis', variables('apiCenterName'), 'default', parameters('mcpServers')[copyIndex()].name)]",
-                "[resourceId('Microsoft.ApiCenter/services/workspaces/environments', variables('apiCenterName'), 'default', 'apim-gateway')]"
               ]
             }
           ],

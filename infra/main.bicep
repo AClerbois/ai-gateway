@@ -26,7 +26,7 @@ param environment string = 'dev'
 param location string = resourceGroup().location
 
 @description('Base name prefix for all resources.')
-param baseName string = 'apim-mcp-${environment}'
+param baseName string = 'apim-mcp-${environment}-${uniqueString(resourceGroup().id)}'
 
 @description('Publisher email for the APIM instance.')
 param publisherEmail string
@@ -148,6 +148,9 @@ module apimProducts 'modules/apim-products.bicep' = {
     profiles: profiles
     mcpServers: mcpServers
   }
+  dependsOn: [
+    apimApis
+  ]
 }
 
 module apimBackends 'modules/apim-backends.bicep' = {

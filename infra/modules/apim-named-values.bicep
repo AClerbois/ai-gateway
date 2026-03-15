@@ -46,16 +46,22 @@ resource namedValueClientAppIds 'Microsoft.ApiManagement/service/namedValues@202
 }
 
 // ---------------------------------------------------------------------------
-// Named Values — MCP Primitives Filter (per server)
-// Uses sub-module to work around BCP138 (no nested for + conditional).
+// Named Values — MCP Primitives Filter (single config with all servers)
+// Contains a JSON dictionary mapping server names to their filter configs.
+// Referenced statically as {{mcp-primitives-config}} in MCP policies.
 // ---------------------------------------------------------------------------
-module mcpPrimitivesNamedValues 'apim-named-values-primitives.bicep' = [
-  for server in approvedServers: if (contains(server, 'mcpPrimitives')) {
-    name: 'nv-primitives-${server.name}'
-    params: {
-      apimName: apimName
-      serverName: server.name
-      mcpPrimitivesJson: string(server.mcpPrimitives)
-    }
+var serversWithPrimitives = filter(approvedServers, s => contains(s, 'mcpPrimitives'))
+var primitivesConfigMap = toObject(serversWithPrimitives, s => s.name, s => s.mcpPrimitives)
+
+resource namedValuePrimitivesConfig 'Microsoft.ApiManagement/service/namedValues@2024-06-01-preview' = {
+  parent: apim
+  name: 'mcp-primitives-config'
+  properties: {
+    displayName: 'mcp-primitives-config'
+    value: string(primitivesConfigMap)
+    secret: false
+    tags: [
+      'mcp-primitives'
+    ]
   }
-]
+}
