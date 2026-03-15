@@ -32,7 +32,7 @@ jobs:
     name: Validate MCP Whitelist
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Validate MCP Whitelist (JSON Schema)
         run: |
@@ -67,7 +67,7 @@ jobs:
     needs: whitelist
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Azure Login (OIDC)
         uses: azure/login@v2
@@ -92,7 +92,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment || 'dev' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Azure Login (OIDC)
         uses: azure/login@v2
