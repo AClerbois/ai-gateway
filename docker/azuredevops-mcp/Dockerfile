@@ -2,7 +2,7 @@
 # Azure DevOps MCP Server — stdio → Streamable HTTP via supergateway
 # Exposes @anthropic/azure-devops-mcp-server tools through HTTP.
 # ---------------------------------------------------------------------------
-FROM node:20-slim
+FROM node:25-slim
 
 RUN npm install -g \
     supergateway@latest \
