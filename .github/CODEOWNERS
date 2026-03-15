@@ -1,0 +1,19 @@
+# CODEOWNERS — APIM MCP Gateway
+# These owners will be automatically requested for review on PRs.
+
+# Default owner for everything
+* @AClerbois
+
+# Configuration files — require review for governance changes
+/config/mcp-whitelist.json @AClerbois
+/config/mcp-servers.json @AClerbois
+/config/profiles.json @AClerbois
+
+# Infrastructure
+/infra/ @AClerbois
+
+# APIM Policies
+/policies/ @AClerbois
+
+# CI/CD
+/.github/workflows/ @AClerbois
