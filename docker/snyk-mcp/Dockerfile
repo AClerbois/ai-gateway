@@ -2,7 +2,7 @@
 # Snyk MCP Server — stdio → Streamable HTTP via supergateway
 # Exposes snyk-mcp-server security scanning tools through HTTP.
 # ---------------------------------------------------------------------------
-FROM node:20-slim
+FROM node:25-slim
 
 RUN npm install -g \
     supergateway@latest \
