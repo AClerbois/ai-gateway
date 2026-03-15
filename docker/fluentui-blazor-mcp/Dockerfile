@@ -4,7 +4,7 @@
 # ---------------------------------------------------------------------------
 
 # Stage 1: Install .NET dotnet tool
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS dotnet-tools
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS dotnet-tools
 RUN dotnet tool install --global fluentui-mcp --prerelease
 ENV PATH="$PATH:/root/.dotnet/tools"
 
