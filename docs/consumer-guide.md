@@ -28,20 +28,22 @@ L'AI Gateway centralise l'accès à tous les serveurs MCP (Model Context Protoco
 - **Sécurité** : validation Entra ID optionnelle, TLS 1.2+
 - **Découverte** : catalogue API Center pour explorer les MCP disponibles
 
-```
-Votre IDE (VS Code / Copilot)
-       │
-       ▼  Ocp-Apim-Subscription-Key: <votre-clé>
-┌──────────────────────┐
-│   APIM AI Gateway    │  ← Rate limiting, logging, auth
-│                      │
-│   Profil: Developer  │  ← Accès restreint selon votre profil
-└──────┬───────────────┘
-       │
-    ┌──┼──────────────┐
-    ▼  ▼              ▼
- GitHub  Terraform  Azure OpenAI
-  MCP      MCP        API
+```mermaid
+flowchart TD
+    IDE["🖥️ Votre IDE<br/>(VS Code / Copilot)"]
+    IDE -->|"Ocp-Apim-Subscription-Key"| APIM
+
+    subgraph APIM["APIM AI Gateway"]
+        Policy["Rate limiting · Logging · Auth"]
+        Profile["Profil : Developer"]
+    end
+
+    APIM --> GitHub["GitHub MCP"]
+    APIM --> Terraform["Terraform MCP"]
+    APIM --> AOAI["Azure OpenAI"]
+
+    style APIM fill:#0078d4,color:#fff
+    style IDE fill:#f3f3f3,color:#000
 ```
 
 ---
@@ -335,30 +337,33 @@ Le gateway s'intègre avec le système **MCP Allowlist** de GitHub Copilot (Busi
 
 ### Comment ça fonctionne ?
 
-```
-┌──────────────────────────────────────┐
-│ config/profiles.json                 │  ← Profils (Developer, BA, App-1...)
-│ config/mcp-whitelist.json            │  ← Whitelist (serveurs approuvés)
-│ config/mcp-servers.json              │  ← Serveurs (endpoints, transport)
-└──────────────┬───────────────────────┘
-               │
-               ▼  generate-mcp-registry.ps1
-┌──────────────────────────────────────┐
-│ output/registry/                     │
-│   ├── developer/servers.json         │  ← 6 serveurs
-│   ├── business-analyst/servers.json  │  ← 3 serveurs
-│   ├── app-1/servers.json             │  ← 4 serveurs
-│   ├── app-2/servers.json             │  ← 4 serveurs
-│   └── all-mcp-tools/servers.json     │  ← Tous les serveurs
-└──────────────┬───────────────────────┘
-               │
-               ▼  Hébergé (API Center / Static Web App / Artifact)
-┌──────────────────────────────────────┐
-│ GitHub Org Settings                  │
-│   Copilot > Policies > MCP          │
-│   Policy: "Registry only"           │
-│   Registry URL: https://...         │
-└──────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph Config["Fichiers de configuration"]
+        Profiles["config/profiles.json<br/>Developer, BA, App-1..."]
+        Whitelist["config/mcp-whitelist.json<br/>Serveurs approuvés"]
+        Servers["config/mcp-servers.json<br/>Endpoints, transport"]
+    end
+
+    Config -->|"generate-mcp-registry.ps1"| Registry
+
+    subgraph Registry["output/registry/"]
+        Dev["developer/servers.json — 6 serveurs"]
+        BA["business-analyst/servers.json — 3 serveurs"]
+        App1["app-1/servers.json — 4 serveurs"]
+        App2["app-2/servers.json — 4 serveurs"]
+        All["all-mcp-tools/servers.json — Tous"]
+    end
+
+    Registry -->|"Hébergé (API Center / SWA / Artifact)"| GitHub
+
+    subgraph GitHub["GitHub Org Settings"]
+        Copilot["Copilot > Policies > MCP<br/>Policy: Registry only<br/>Registry URL: https://..."]
+    end
+
+    style Config fill:#005a9e,color:#fff
+    style Registry fill:#0078d4,color:#fff
+    style GitHub fill:#24292f,color:#fff
 ```
 
 ### Générer le registre localement

@@ -4,40 +4,50 @@ Azure API Management as an **AI Gateway** to expose, govern, and secure MCP (Mod
 
 ## Architecture
 
-```
-MCP Clients (VS Code, Copilot, etc.)
-        │
-        ▼  Ocp-Apim-Subscription-Key (per profile)
-┌──────────────────────────────────────────┐
-│   Azure API Management                   │
-│   (AI Gateway - Developer)               │
-│                                          │
-│   ┌── Profiles (APIM Products) ────────┐ │
-│   │ All MCP Tools   → all servers      │ │
-│   │ Developer       → GitHub, ADO, ... │ │
-│   │ Business Analyst → Learn, Custom   │ │
-│   │ Application 1   → Learn, GitHub    │ │
-│   │ Application 2   → Learn, Terraform │ │
-│   └────────────────────────────────────┘ │
-│                                          │
-│   ┌─── MCP Server APIs ───┐             │
-│   │ mslearn-mcp            │─── → learn.microsoft.com/api/mcp
-│   │ custom-mcp             │─── → Custom MCP Server
-│   │ aoai-api               │─── → Azure OpenAI Endpoint
-│   │                        │             │
-│   │ Wrapped stdio servers  │             │
-│   │ github-mcp             │──┐          │
-│   │ azuredevops-mcp        │──┤          │
-│   │ terraform-mcp          │──┼─ → Azure Container Apps
-│   │ snyk-mcp               │──┤   (supergateway wrappers)
-│   │ fluentui-blazor-mcp    │──┘          │
-│   └────────────────────────┘             │
-└──────────────────────────────────────────┘
-        │                          │
-        ▼                          ▼
-   Azure Monitor              API Center
-   (Log Analytics              (catalog +
-    + App Insights)             discovery)
+```mermaid
+flowchart TD
+    Clients["🖥️ MCP Clients<br/>(VS Code, Copilot, etc.)"]
+
+    Clients -->|"Ocp-Apim-Subscription-Key<br/>(per profile)"| APIM
+
+    subgraph APIM["Azure API Management — AI Gateway"]
+        direction TB
+        subgraph Profiles["Profiles (APIM Products)"]
+            P1["All MCP Tools → all servers"]
+            P2["Developer → GitHub, ADO, ..."]
+            P3["Business Analyst → Learn, Custom"]
+            P4["Application 1 → Learn, GitHub"]
+            P5["Application 2 → Learn, Terraform"]
+        end
+
+        subgraph APIs["MCP Server APIs"]
+            direction LR
+            MSLearn["mslearn-mcp"]
+            Custom["custom-mcp"]
+            AOAI["aoai-api"]
+            GH["github-mcp"]
+            ADO["azuredevops-mcp"]
+            TF["terraform-mcp"]
+            Snyk["snyk-mcp"]
+            Fluent["fluentui-blazor-mcp"]
+        end
+    end
+
+    MSLearn --> LearnBackend["learn.microsoft.com/api/mcp"]
+    Custom --> CustomBackend["Custom MCP Server"]
+    AOAI --> AOAIBackend["Azure OpenAI Endpoint"]
+
+    GH & ADO & TF & Snyk & Fluent --> ContainerApps["Azure Container Apps<br/>(supergateway wrappers)"]
+
+    APIM -.-> Monitor["Azure Monitor<br/>Log Analytics + App Insights"]
+    APIM -.-> APICenter["API Center<br/>Catalog + Discovery"]
+
+    style APIM fill:#0078d4,color:#fff
+    style Profiles fill:#005a9e,color:#fff
+    style APIs fill:#005a9e,color:#fff
+    style ContainerApps fill:#50e6ff,color:#000
+    style Monitor fill:#7fba00,color:#fff
+    style APICenter fill:#7fba00,color:#fff
 ```
 
 ## Prerequisites

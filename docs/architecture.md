@@ -184,16 +184,17 @@ The Bicep loop in `apim-apis.bicep` and `apim-backends.bicep` automatically crea
 
 ## Bicep Module Dependency Graph
 
-```
-monitoring.bicep ──────────────┐
-                               ▼
-apim.bicep ───────────► apim-logger.bicep
-    │                          
-    ├──────────────────► apim-named-values.bicep
-    │
-    ├──────────────────► apim-products.bicep ──► apim-apis.bicep
-    │                                                   ▲
-    └──────────────────► apim-backends.bicep ────────────┘
-                                                        │
-                                              Global Policy (main.bicep)
+```mermaid
+flowchart LR
+    Monitoring["monitoring.bicep"] --> APIM["apim.bicep"]
+    APIM --> Logger["apim-logger.bicep"]
+    APIM --> NamedValues["apim-named-values.bicep"]
+    APIM --> Products["apim-products.bicep"]
+    APIM --> Backends["apim-backends.bicep"]
+    Products --> APIs["apim-apis.bicep"]
+    Backends --> APIs
+    APIs --> GlobalPolicy["Global Policy<br/>(main.bicep)"]
+
+    style APIM fill:#0078d4,color:#fff
+    style GlobalPolicy fill:#ffd700,color:#000
 ```
