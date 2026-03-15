@@ -37,7 +37,7 @@
       "displayName": "GitHub MCP Server",
       "description": "GitHub operations via supergateway wrapper (stdio → Streamable HTTP).",
       "type": "custom",
-      "backendUrl": "https://CONTAINER_APP_FQDN_PLACEHOLDER",
+      "backendUrl": "https://ca-github-mcp.bravegrass-f7627829.westeurope.azurecontainerapps.io",
       "transport": "streamable-http",
       "basePath": "github-mcp",
       "rateLimitPerMinute": 60
@@ -47,7 +47,7 @@
       "displayName": "Azure DevOps MCP Server",
       "description": "Azure DevOps operations via supergateway wrapper (stdio → Streamable HTTP).",
       "type": "custom",
-      "backendUrl": "https://CONTAINER_APP_FQDN_PLACEHOLDER",
+      "backendUrl": "https://ca-azuredevops-mcp.bravegrass-f7627829.westeurope.azurecontainerapps.io",
       "transport": "streamable-http",
       "basePath": "azuredevops-mcp",
       "rateLimitPerMinute": 60
@@ -57,7 +57,7 @@
       "displayName": "Terraform MCP Server",
       "description": "Terraform provider docs and resources via supergateway wrapper (stdio → Streamable HTTP).",
       "type": "custom",
-      "backendUrl": "https://CONTAINER_APP_FQDN_PLACEHOLDER",
+      "backendUrl": "https://ca-terraform-mcp.bravegrass-f7627829.westeurope.azurecontainerapps.io",
       "transport": "streamable-http",
       "basePath": "terraform-mcp",
       "rateLimitPerMinute": 60
@@ -77,7 +77,7 @@
       "displayName": "Fluent UI Blazor MCP Server",
       "description": "Fluent UI Blazor component docs via supergateway wrapper (stdio → Streamable HTTP).",
       "type": "custom",
-      "backendUrl": "https://CONTAINER_APP_FQDN_PLACEHOLDER",
+      "backendUrl": "https://ca-fluentui-blazor-mcp.bravegrass-f7627829.westeurope.azurecontainerapps.io",
       "transport": "streamable-http",
       "basePath": "fluentui-blazor-mcp",
       "rateLimitPerMinute": 60

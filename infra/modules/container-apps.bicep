@@ -56,7 +56,7 @@ resource containerAppsEnv 'Microsoft.App/managedEnvironments@2024-03-01' = {
 // ---------------------------------------------------------------------------
 resource containerApps 'Microsoft.App/containerApps@2024-03-01' = [
   for server in wrappedMcpServers: {
-    name: '${baseName}-${server.name}'
+    name: 'ca-${server.name}'
     location: location
     tags: tags
     properties: {
@@ -82,7 +82,7 @@ resource containerApps 'Microsoft.App/containerApps@2024-03-01' = [
               value: acr.listCredentials().passwords[0].value
             }
           ],
-          map(server.envVars, envVar => {
+          map(filter(server.envVars, envVar => !empty(envVar.value)), envVar => {
             name: toLower(replace(envVar.name, '_', '-'))
             value: envVar.value
           })
@@ -98,7 +98,7 @@ resource containerApps 'Microsoft.App/containerApps@2024-03-01' = [
               memory: '1Gi'
             }
             env: [
-              for envVar in server.envVars: {
+              for envVar in filter(server.envVars, ev => !empty(ev.value)): {
                 name: envVar.name
                 secretRef: toLower(replace(envVar.name, '_', '-'))
               }

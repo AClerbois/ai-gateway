@@ -1,12 +1,12 @@
 # ---------------------------------------------------------------------------
 # Terraform MCP Server — stdio → Streamable HTTP via supergateway
-# Exposes @anthropic/terraform-mcp-server tools through HTTP.
+# Exposes terraform-mcp-server tools through HTTP.
 # ---------------------------------------------------------------------------
 FROM node:25-slim
 
 RUN npm install -g \
     supergateway@latest \
-    @anthropic/terraform-mcp-server@latest
+    terraform-mcp-server@latest
 
 EXPOSE 8000
 

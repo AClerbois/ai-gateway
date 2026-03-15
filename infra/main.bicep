@@ -63,7 +63,7 @@ var mcpPolicyXml = loadTextContent('../policies/mcp-passthrough-policy.xml')
 var aoaiPolicyXml = loadTextContent('../policies/aoai-policy.xml')
 
 var wrappedConfig = loadJsonContent('../config/wrapped-mcp-servers.json')
-var wrappedMcpServers = wrappedConfig.wrappedMcpServers
+var wrappedMcpServers = filter(wrappedConfig.wrappedMcpServers, server => server.name != 'snyk-mcp')
 
 var profilesConfig = loadJsonContent('../config/profiles.json')
 var profiles = profilesConfig.profiles
