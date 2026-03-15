@@ -150,6 +150,7 @@ module apimProducts 'modules/apim-products.bicep' = {
   }
   dependsOn: [
     apimApis
+    apimMcpServers
   ]
 }
 
@@ -175,6 +176,20 @@ module apimApis 'modules/apim-apis.bicep' = {
   dependsOn: [
     apimBackends
     apimLogger
+  ]
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3b: Native MCP Server APIs (type='mcp' with mcpProperties)
+// ---------------------------------------------------------------------------
+module apimMcpServers 'modules/apim-mcp-servers.bicep' = {
+  name: 'apim-mcp-servers'
+  params: {
+    apimName: apim.outputs.apimName
+    mcpServers: mcpServers
+  }
+  dependsOn: [
+    apimBackends
   ]
 }
 
@@ -219,6 +234,18 @@ output mcpServerEndpoints array = [
     name: server.name
     displayName: server.displayName
     endpoint: '${apim.outputs.apimGatewayUrl}/${server.basePath}'
+  }
+]
+
+output nativeMcpServerEndpoints array = [
+  for server in mcpServers: server.transport == 'streamable-http' && server.type != 'azure-openai' && !contains(server.backendUrl, 'PLACEHOLDER') ? {
+    name: server.name
+    displayName: server.displayName
+    endpoint: '${apim.outputs.apimGatewayUrl}/${server.basePath}-mcp-server/mcp'
+  } : {
+    name: server.name
+    displayName: server.displayName
+    endpoint: ''
   }
 ]
 

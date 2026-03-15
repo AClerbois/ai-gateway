@@ -89,6 +89,24 @@ module productApis 'apim-product-apis.bicep' = [
 ]
 
 // ---------------------------------------------------------------------------
+// Native MCP Server API-to-Product associations (via sub-module)
+// ---------------------------------------------------------------------------
+module productMcpApis 'apim-product-mcp-apis.bicep' = [
+  for (profile, i) in resolvedProfiles: {
+    name: 'product-mcp-apis-${profile.name}'
+    params: {
+      apimName: apimName
+      profileName: profile.name
+      serverNames: profile.servers
+      mcpServers: mcpServers
+    }
+    dependsOn: [
+      products[i]
+    ]
+  }
+]
+
+// ---------------------------------------------------------------------------
 // Outputs
 // ---------------------------------------------------------------------------
 output productNames array = [for (profile, i) in resolvedProfiles: products[i].name]

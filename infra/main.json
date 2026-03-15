@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.41.2.15936",
-      "templateHash": "3812765075447003068"
+      "templateHash": "17639135025098621950"
     }
   },
   "parameters": {
@@ -116,7 +116,7 @@
           "displayName": "GitHub MCP Server",
           "description": "GitHub operations via supergateway wrapper (stdio → Streamable HTTP).",
           "type": "custom",
-          "backendUrl": "https://CONTAINER_APP_FQDN_PLACEHOLDER",
+          "backendUrl": "https://ca-github-mcp.bravegrass-f7627829.westeurope.azurecontainerapps.io",
           "transport": "streamable-http",
           "basePath": "github-mcp",
           "rateLimitPerMinute": 60
@@ -126,7 +126,7 @@
           "displayName": "Azure DevOps MCP Server",
           "description": "Azure DevOps operations via supergateway wrapper (stdio → Streamable HTTP).",
           "type": "custom",
-          "backendUrl": "https://CONTAINER_APP_FQDN_PLACEHOLDER",
+          "backendUrl": "https://ca-azuredevops-mcp.bravegrass-f7627829.westeurope.azurecontainerapps.io",
           "transport": "streamable-http",
           "basePath": "azuredevops-mcp",
           "rateLimitPerMinute": 60
@@ -136,7 +136,7 @@
           "displayName": "Terraform MCP Server",
           "description": "Terraform provider docs and resources via supergateway wrapper (stdio → Streamable HTTP).",
           "type": "custom",
-          "backendUrl": "https://CONTAINER_APP_FQDN_PLACEHOLDER",
+          "backendUrl": "https://ca-terraform-mcp.bravegrass-f7627829.westeurope.azurecontainerapps.io",
           "transport": "streamable-http",
           "basePath": "terraform-mcp",
           "rateLimitPerMinute": 60
@@ -156,7 +156,7 @@
           "displayName": "Fluent UI Blazor MCP Server",
           "description": "Fluent UI Blazor component docs via supergateway wrapper (stdio → Streamable HTTP).",
           "type": "custom",
-          "backendUrl": "https://CONTAINER_APP_FQDN_PLACEHOLDER",
+          "backendUrl": "https://ca-fluentui-blazor-mcp.bravegrass-f7627829.westeurope.azurecontainerapps.io",
           "transport": "streamable-http",
           "basePath": "fluentui-blazor-mcp",
           "rateLimitPerMinute": 60
@@ -1407,7 +1407,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "15230348059961770292"
+              "templateHash": "11106205375897568888"
             }
           },
           "parameters": {
@@ -1557,6 +1557,96 @@
               "dependsOn": [
                 "[resourceId('Microsoft.ApiManagement/service/products', parameters('apimName'), variables('resolvedProfiles')[copyIndex()].name)]"
               ]
+            },
+            {
+              "copy": {
+                "name": "productMcpApis",
+                "count": "[length(variables('resolvedProfiles'))]"
+              },
+              "type": "Microsoft.Resources/deployments",
+              "apiVersion": "2025-04-01",
+              "name": "[format('product-mcp-apis-{0}', variables('resolvedProfiles')[copyIndex()].name)]",
+              "properties": {
+                "expressionEvaluationOptions": {
+                  "scope": "inner"
+                },
+                "mode": "Incremental",
+                "parameters": {
+                  "apimName": {
+                    "value": "[parameters('apimName')]"
+                  },
+                  "profileName": {
+                    "value": "[variables('resolvedProfiles')[copyIndex()].name]"
+                  },
+                  "serverNames": {
+                    "value": "[variables('resolvedProfiles')[copyIndex()].servers]"
+                  },
+                  "mcpServers": {
+                    "value": "[parameters('mcpServers')]"
+                  }
+                },
+                "template": {
+                  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+                  "contentVersion": "1.0.0.0",
+                  "metadata": {
+                    "_generator": {
+                      "name": "bicep",
+                      "version": "0.41.2.15936",
+                      "templateHash": "6641768359913989689"
+                    }
+                  },
+                  "parameters": {
+                    "apimName": {
+                      "type": "string",
+                      "metadata": {
+                        "description": "Name of the existing APIM instance."
+                      }
+                    },
+                    "profileName": {
+                      "type": "string",
+                      "metadata": {
+                        "description": "Product (profile) name."
+                      }
+                    },
+                    "serverNames": {
+                      "type": "array",
+                      "metadata": {
+                        "description": "Server names to associate with this product."
+                      }
+                    },
+                    "mcpServers": {
+                      "type": "array",
+                      "metadata": {
+                        "description": "All MCP server definitions (for eligibility filtering)."
+                      }
+                    }
+                  },
+                  "variables": {
+                    "copy": [
+                      {
+                        "name": "eligibleNames",
+                        "count": "[length(parameters('mcpServers'))]",
+                        "input": "[if(and(and(equals(parameters('mcpServers')[copyIndex('eligibleNames')].transport, 'streamable-http'), not(equals(parameters('mcpServers')[copyIndex('eligibleNames')].type, 'azure-openai'))), not(contains(parameters('mcpServers')[copyIndex('eligibleNames')].backendUrl, 'PLACEHOLDER'))), parameters('mcpServers')[copyIndex('eligibleNames')].name, '')]"
+                      }
+                    ]
+                  },
+                  "resources": [
+                    {
+                      "copy": {
+                        "name": "mcpApiProductAssociations",
+                        "count": "[length(parameters('serverNames'))]"
+                      },
+                      "condition": "[contains(variables('eligibleNames'), parameters('serverNames')[copyIndex()])]",
+                      "type": "Microsoft.ApiManagement/service/products/apis",
+                      "apiVersion": "2024-06-01-preview",
+                      "name": "[format('{0}/{1}/{2}-mcp-server', parameters('apimName'), parameters('profileName'), parameters('serverNames')[copyIndex()])]"
+                    }
+                  ]
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service/products', parameters('apimName'), variables('resolvedProfiles')[copyIndex()].name)]"
+              ]
             }
           ],
           "outputs": {
@@ -1579,7 +1669,8 @@
       },
       "dependsOn": [
         "[resourceId('Microsoft.Resources/deployments', 'apim')]",
-        "[resourceId('Microsoft.Resources/deployments', 'apim-apis')]"
+        "[resourceId('Microsoft.Resources/deployments', 'apim-apis')]",
+        "[resourceId('Microsoft.Resources/deployments', 'apim-mcp-servers')]"
       ]
     },
     {
@@ -1907,6 +1998,130 @@
         "[resourceId('Microsoft.Resources/deployments', 'apim')]",
         "[resourceId('Microsoft.Resources/deployments', 'apim-backends')]",
         "[resourceId('Microsoft.Resources/deployments', 'apim-logger')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "apim-mcp-servers",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "apimName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'apim'), '2025-04-01').outputs.apimName.value]"
+          },
+          "mcpServers": {
+            "value": "[variables('mcpServers')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "17112585518559984127"
+            }
+          },
+          "parameters": {
+            "apimName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the existing APIM instance."
+              }
+            },
+            "mcpServers": {
+              "type": "array",
+              "metadata": {
+                "description": "Array of MCP server definitions from config/mcp-servers.json."
+              }
+            }
+          },
+          "variables": {
+            "copy": [
+              {
+                "name": "serverEligibility",
+                "count": "[length(parameters('mcpServers'))]",
+                "input": {
+                  "name": "[parameters('mcpServers')[copyIndex('serverEligibility')].name]",
+                  "eligible": "[and(and(equals(parameters('mcpServers')[copyIndex('serverEligibility')].transport, 'streamable-http'), not(equals(parameters('mcpServers')[copyIndex('serverEligibility')].type, 'azure-openai'))), not(contains(parameters('mcpServers')[copyIndex('serverEligibility')].backendUrl, 'PLACEHOLDER')))]",
+                  "needsMcpBackend": "[endsWith(parameters('mcpServers')[copyIndex('serverEligibility')].backendUrl, '/mcp')]"
+                }
+              }
+            ]
+          },
+          "resources": [
+            {
+              "copy": {
+                "name": "mcpBackends",
+                "count": "[length(parameters('mcpServers'))]"
+              },
+              "condition": "[and(variables('serverEligibility')[copyIndex()].eligible, variables('serverEligibility')[copyIndex()].needsMcpBackend)]",
+              "type": "Microsoft.ApiManagement/service/backends",
+              "apiVersion": "2024-06-01-preview",
+              "name": "[format('{0}/{1}', parameters('apimName'), format('{0}-mcp-backend', parameters('mcpServers')[copyIndex()].name))]",
+              "properties": {
+                "title": "[format('{0} (MCP)', parameters('mcpServers')[copyIndex()].displayName)]",
+                "description": "[format('MCP-native backend for {0}', parameters('mcpServers')[copyIndex()].displayName)]",
+                "url": "[replace(parameters('mcpServers')[copyIndex()].backendUrl, '/mcp', '')]",
+                "protocol": "http",
+                "tls": {
+                  "validateCertificateChain": true,
+                  "validateCertificateName": true
+                }
+              }
+            },
+            {
+              "copy": {
+                "name": "mcpApis",
+                "count": "[length(parameters('mcpServers'))]"
+              },
+              "condition": "[variables('serverEligibility')[copyIndex()].eligible]",
+              "type": "Microsoft.ApiManagement/service/apis",
+              "apiVersion": "2024-06-01-preview",
+              "name": "[format('{0}/{1}', parameters('apimName'), format('{0}-mcp-server', parameters('mcpServers')[copyIndex()].name))]",
+              "properties": {
+                "displayName": "[format('{0} (MCP)', parameters('mcpServers')[copyIndex()].displayName)]",
+                "description": "[format('{0} (Native MCP Server)', parameters('mcpServers')[copyIndex()].description)]",
+                "type": "mcp",
+                "path": "[format('{0}-mcp-server', parameters('mcpServers')[copyIndex()].basePath)]",
+                "protocols": [
+                  "https"
+                ],
+                "subscriptionRequired": true,
+                "subscriptionKeyParameterNames": {
+                  "header": "Ocp-Apim-Subscription-Key",
+                  "query": "subscription-key"
+                },
+                "backendId": "[if(variables('serverEligibility')[copyIndex()].needsMcpBackend, format('{0}-mcp-backend', parameters('mcpServers')[copyIndex()].name), format('{0}-backend', parameters('mcpServers')[copyIndex()].name))]",
+                "isCurrent": true,
+                "mcpProperties": {
+                  "transportType": "streamable"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service/backends', parameters('apimName'), format('{0}-mcp-backend', parameters('mcpServers')[copyIndex()].name))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "mcpServerNames": {
+              "type": "array",
+              "copy": {
+                "count": "[length(parameters('mcpServers'))]",
+                "input": "[if(variables('serverEligibility')[copyIndex()].eligible, format('{0}-mcp-server', parameters('mcpServers')[copyIndex()].name), '')]"
+              }
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'apim')]",
+        "[resourceId('Microsoft.Resources/deployments', 'apim-backends')]"
       ]
     },
     {
@@ -2244,6 +2459,13 @@
           "displayName": "[variables('mcpServers')[copyIndex()].displayName]",
           "endpoint": "[format('{0}/{1}', reference(resourceId('Microsoft.Resources/deployments', 'apim'), '2025-04-01').outputs.apimGatewayUrl.value, variables('mcpServers')[copyIndex()].basePath)]"
         }
+      }
+    },
+    "nativeMcpServerEndpoints": {
+      "type": "array",
+      "copy": {
+        "count": "[length(variables('mcpServers'))]",
+        "input": "[if(and(and(equals(variables('mcpServers')[copyIndex()].transport, 'streamable-http'), not(equals(variables('mcpServers')[copyIndex()].type, 'azure-openai'))), not(contains(variables('mcpServers')[copyIndex()].backendUrl, 'PLACEHOLDER'))), createObject('name', variables('mcpServers')[copyIndex()].name, 'displayName', variables('mcpServers')[copyIndex()].displayName, 'endpoint', format('{0}/{1}-mcp-server/mcp', reference(resourceId('Microsoft.Resources/deployments', 'apim'), '2025-04-01').outputs.apimGatewayUrl.value, variables('mcpServers')[copyIndex()].basePath)), createObject('name', variables('mcpServers')[copyIndex()].name, 'displayName', variables('mcpServers')[copyIndex()].displayName, 'endpoint', ''))]"
       }
     },
     "appInsightsConnectionString": {
