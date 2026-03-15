@@ -9,7 +9,7 @@ RUN dotnet tool install --global fluentui-mcp --prerelease
 ENV PATH="$PATH:/root/.dotnet/tools"
 
 # Stage 2: Final image with Node.js + .NET runtime + supergateway
-FROM node:20-slim
+FROM node:25-slim
 
 # Install .NET 9 runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
