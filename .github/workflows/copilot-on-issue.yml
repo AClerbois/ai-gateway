@@ -1,0 +1,100 @@
+name: Copilot Agentic Issue Processor
+
+on:
+  issues:
+    types: [opened, labeled]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  assign-copilot:
+    name: Assign Copilot to Configuration Issue
+    runs-on: ubuntu-latest
+    if: |
+      contains(github.event.issue.labels.*.name, 'mcp-server') ||
+      contains(github.event.issue.labels.*.name, 'profile')
+    steps:
+      - name: Determine issue type
+        id: issue-type
+        run: |
+          if echo '${{ toJSON(github.event.issue.labels.*.name) }}' | grep -q 'mcp-server'; then
+            echo "type=mcp-server" >> $GITHUB_OUTPUT
+            echo "skill=add-mcp-server" >> $GITHUB_OUTPUT
+          elif echo '${{ toJSON(github.event.issue.labels.*.name) }}' | grep -q 'profile'; then
+            echo "type=profile" >> $GITHUB_OUTPUT
+            echo "skill=add-profile" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Add processing comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issueType = '${{ steps.issue-type.outputs.type }}';
+            const skill = '${{ steps.issue-type.outputs.skill }}';
+            const body = [
+              '🤖 **Copilot Coding Agent** has been assigned to this issue.',
+              '',
+              `This issue will be processed using the \`${skill}\` skill.`,
+              '',
+              'Copilot will:',
+              issueType === 'mcp-server'
+                ? [
+                    '1. Parse the server information from this issue',
+                    '2. Update `config/mcp-servers.json` with the new server entry',
+                    '3. Create a Dockerfile if the transport is `stdio`',
+                    '4. Update `config/wrapped-mcp-servers.json` if stdio',
+                    '5. Add a whitelist entry in `config/mcp-whitelist.json`',
+                    '6. Update `config/profiles.json` if profiles are selected',
+                    '7. Run validation (`scripts/validate-mcp-whitelist.ps1`)',
+                    '8. Create a Pull Request with all changes'
+                  ].join('\n')
+                : [
+                    '1. Parse the profile information from this issue',
+                    '2. Create a new profile in `config/profiles.json`',
+                    '3. Update `allowedProfiles` in `config/mcp-whitelist.json`',
+                    '4. Run validation (`scripts/validate-mcp-whitelist.ps1`)',
+                    '5. Create a Pull Request with all changes'
+                  ].join('\n'),
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body
+            });
+
+      - name: Assign Copilot to issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            try {
+              await github.rest.issues.addAssignees({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                assignees: ['copilot']
+              });
+              console.log('Copilot assigned successfully');
+            } catch (error) {
+              console.log(`Could not assign Copilot: ${error.message}`);
+              console.log('Ensure Copilot Coding Agent is enabled for this repository.');
+
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: [
+                  '⚠️ **Could not auto-assign Copilot Coding Agent.**',
+                  '',
+                  'To process this issue automatically:',
+                  '1. Ensure [Copilot Coding Agent](https://docs.github.com/en/copilot/using-github-copilot/using-copilot-coding-agent) is enabled for this repository',
+                  '2. Manually assign `@copilot` to this issue',
+                  '',
+                  'Alternatively, apply the changes manually following the project skills in `.github/skills/`.'
+                ].join('\n')
+              });
+            }

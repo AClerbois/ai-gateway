@@ -1,0 +1,31 @@
+steps:
+  - uses: actions/checkout@v4
+
+  - name: Setup Node.js
+    uses: actions/setup-node@v4
+    with:
+      node-version: "20"
+
+  - name: Setup PowerShell modules
+    shell: pwsh
+    run: |
+      Write-Host "PowerShell $($PSVersionTable.PSVersion) ready"
+
+  - name: Verify project structure
+    shell: pwsh
+    run: |
+      $requiredFiles = @(
+        "config/mcp-servers.json",
+        "config/profiles.json",
+        "config/wrapped-mcp-servers.json",
+        "config/mcp-whitelist.json",
+        "config/mcp-whitelist.schema.json",
+        "scripts/validate-mcp-whitelist.ps1"
+      )
+      foreach ($file in $requiredFiles) {
+        if (Test-Path $file) {
+          Write-Host "OK: $file"
+        } else {
+          Write-Warning "MISSING: $file"
+        }
+      }
