@@ -3,7 +3,7 @@
 # .NET global tool (Microsoft.FluentUI.AspNetCore.McpServer) wrapped with
 # supergateway for HTTP transport.
 # ---------------------------------------------------------------------------
-FROM mcr.microsoft.com/dotnet/sdk:9.0-alpine
+FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine
 
 # Install Node.js for supergateway
 RUN apk add --no-cache nodejs npm
